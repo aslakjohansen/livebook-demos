@@ -1,0 +1,134 @@
+# Protocols
+
+## Introduction
+
+Essentially an OO interface (for data) done right. They do, however, have the following benefits:
+
+1. The implementation is decoupled from both the protocol definition (the interface equivalent) and the struct (the class equivalent) it is implemented for.
+2. As functions are called through the interface name, there cannot be function name clashes. In other words, a struct may implement two interfaces that both declare a function with the same specification, and have different implementations for these.
+
+Documentation:
+
+* [elixir-lang getting started: Protocols](https://elixir-lang.org/getting-started/protocols.html)
+
+## Example
+
+Protocol:
+
+```elixir
+defprotocol Shape do
+  @spec circumference(t) :: number
+  def circumference(shape)
+end
+```
+
+Types:
+
+```elixir
+defmodule Circle do
+  defstruct r: 0.0
+end
+
+defmodule Rectangle do
+  defstruct width: 0.0, height: 0.0
+
+  def circumference(rectangle) do
+    2 * (rectangle.width + rectangle.height)
+  end
+end
+```
+
+Implementations:
+
+```elixir
+defimpl Shape, for: Circle do
+  def circumference(circle) do
+    2 * :math.pi() * circle.r
+  end
+end
+
+defimpl Shape, for: Rectangle do
+  def circumference(rectangle) do
+    Rectangle.circumference(rectangle)
+  end
+end
+```
+
+Use:
+
+```elixir
+shapes = [
+  %Circle{r: 0},
+  %Circle{r: 0.5},
+  %Circle{r: 1},
+  %Rectangle{width: 0.5, height: 0.5},
+  %Rectangle{width: 0.5},
+  %Rectangle{}
+]
+
+for shape <- shapes do
+  IO.puts(Shape.circumference(shape))
+end
+```
+
+## Default Implementations
+
+A protocol can be defined for `Any`:
+
+```elixir
+defimpl Shape, for: Any do
+  def circumference(_shape), do: 0.0
+end
+```
+
+A struct can be told to use this *default* implementation:
+
+```elixir
+defmodule Point do
+  @derive [Shape]
+  defstruct x: 0.0, y: 0.0
+end
+```
+
+A protocol can declare that structs lacking a specific implementation can *fall back* to the default implementation:
+
+```elixir
+defprotocol ShapeWithDefault do
+  @fallback_to_any true
+
+  @spec circumference(t) :: number
+  def circumference(shape)
+end
+
+defimpl ShapeWithDefault, for: Any do
+  def circumference(_shape), do: 42.0
+end
+```
+
+Demonstration:
+
+```elixir
+defimpl ShapeWithDefault, for: Circle do
+  def circumference(circle) do
+    2 * :math.pi() * circle.r
+  end
+end
+
+for shape <- shapes do
+  IO.puts(ShapeWithDefault.circumference(shape))
+end
+```
+
+## Built-In Protocols
+
+The `String.Chars` protocol defined the `to_string/0` function. that is used for string interpolation:
+
+```elixir
+"#{42}"
+```
+
+The `Inspect` protocol is responsible for converting any data structure into a human-readable textual representation. It is used by this interpreter:
+
+```elixir
+%Rectangle{width: 1, height: 2}
+```
