@@ -1,0 +1,194 @@
+# Traveling Salesman Problem
+
+```elixir
+Mix.install([
+  {:maplibre, "~> 0.1.3"},
+  {:kino_maplibre, "~> 0.1.7"},
+  {:req, "~> 0.3.0"},
+  {:geocalc, "~> 0.8"}
+])
+```
+
+## Convenience Stuff
+
+```elixir
+alias MapLibre, as: Ml
+```
+
+## Base Dataset
+
+Define some set of cities:
+
+```elixir
+cities = {
+  {12.568337, 55.676098, "Copenhagen"},
+  {-122.272743, 37.871593, "Berkeley"},
+  {36.821945, -1.292066, "Nairobi"},
+  {151.209290, -33.868820, "Sydney"},
+  {116.383331, 39.916668, "Beijing"},
+  {8.55, 47.36667, "Zurich"},
+  {20.22513, 67.85572, "Kiruna"},
+  {-122.335167, 47.608013, "Seattle"},
+  {-78.878738, 42.880230, "Buffalo"},
+  {-79.347015, 43.651070, "Toronto"},
+  {114.062996, 22.542883, "Shenzhen"},
+  {23.727539, 37.983810, "Athens"},
+  {-0.37739, 39.46975, "Valencia"},
+  {4.34878000, 50.85045000, "Brussels"},
+  {24.945831, 60.192059, "Helsinki"}
+}
+```
+
+What does it look like?
+
+```elixir
+markers =
+  cities
+  |> Tuple.to_list()
+  |> Enum.map(fn {long, lat, _name} -> [{long, lat}] end)
+
+map =
+  Ml.new(style: :terrain)
+  |> Kino.MapLibre.add_markers(markers)
+  |> Kino.MapLibre.add_nav_controls(show_compass: false)
+  |> Kino.MapLibre.add_nav_controls(show_zoom: false, position: "top-left")
+```
+
+## Shortest Path
+
+Create distance map:
+
+```elixir
+distances =
+  Enum.map(
+    Tuple.to_list(cities),
+    fn {long, lat, _name} ->
+      Enum.map(
+        Tuple.to_list(cities),
+        fn {long2, lat2, _name2} ->
+          # "#{name} -> #{name2}"
+          Geocalc.distance_between([lat, long], [lat2, long2])
+        end
+      )
+      |> List.to_tuple()
+    end
+  )
+  |> List.to_tuple()
+```
+
+Algorithm itself:
+
+```elixir
+defmodule TSP do
+  defp lookup(dist, a, b) do
+    elem(elem(dist, a), b)
+  end
+
+  defp generate_options([], _done) do
+    []
+  end
+
+  defp generate_options([head | tail], done) do
+    [
+      {head, done ++ tail}
+    ] ++ generate_options(tail, [head | done])
+  end
+
+  def tsp(here, [], dist, current_dist, current_path, best_dist, best_path) do
+    new_dist = current_dist + lookup(dist, here, 0)
+
+    cond do
+      new_dist < best_dist -> {new_dist, current_path ++ [0]}
+      true -> {best_dist, best_path}
+    end
+  end
+
+  def tsp(here, remaining, dist, current_dist, current_path, best_dist, best_path) do
+    options = generate_options(remaining, [])
+
+    List.foldl(options, {best_dist, best_path}, fn {next, rest}, {best_dist, best_path} ->
+      new_dist = current_dist + lookup(dist, here, next)
+
+      cond do
+        new_dist < best_dist ->
+          tsp(next, rest, dist, new_dist, current_path ++ [next], best_dist, best_path)
+
+        true ->
+          {best_dist, best_path}
+      end
+    end)
+  end
+end
+```
+
+Convenient tuple of city names:
+
+```elixir
+citynames =
+  cities
+  |> Tuple.to_list()
+  |> Enum.map(fn {_long, _lat, name} -> name end)
+  |> List.to_tuple()
+```
+
+Run solver (this may take some time):
+
+```elixir
+cityindex = 0..(tuple_size(citynames) - 1) |> Enum.to_list()
+result = TSP.tsp(hd(cityindex), tl(cityindex), distances, 0, [hd(cityindex)], nil, nil)
+```
+
+## Show Result
+
+Result in textual form:
+
+```elixir
+{best_dist, best_path} = result
+IO.puts("Shortest loop (total distance: #{best_dist / 1000} km):")
+Enum.each(best_path, fn index -> IO.puts("- #{elem(citynames, index)}") end)
+```
+
+Define path as needed by MapLibre:
+
+```elixir
+path =
+  Enum.map(
+    best_path,
+    fn index ->
+      {long, lat, _name} = elem(cities, index)
+      {long, lat}
+    end
+  )
+```
+
+Plot on map:
+
+```elixir
+result_map =
+  map
+  |> Ml.add_source("route",
+    type: :geojson,
+    data: [
+      type: "Feature",
+      geometry: [
+        type: "LineString",
+        coordinates: path
+      ]
+    ]
+  )
+  |> Ml.add_layer(
+    id: "route",
+    type: :line,
+    source: "route",
+    layout: [
+      line_join: "round",
+      line_cap: "round"
+    ],
+    paint: [
+      line_color: "#888",
+      line_width: 4
+    ]
+  )
+```
+
+**Note:** Maplibre does not draw edges across the pacific.
