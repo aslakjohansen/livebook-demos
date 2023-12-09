@@ -1,0 +1,231 @@
+# L-System
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.10.0"}
+])
+```
+
+## Introduction
+
+Inspiration from:
+
+* [Livebook Animations blog post](https://zorbash.com/post/livebook-animations/)
+* [Houdini Kitchen: How to create L-Systems](https://www.houdinikitchen.net/2019/12/21/how-to-create-l-systems/)
+
+**Note:** This is an implementation of a simplified version of an l-system generator.
+
+## Modules
+
+```elixir
+defmodule LSystem do
+  defp map_point({x1, y1}, {x2, y2}, {xp, yp}) do
+    vec = %{
+      x: x2 - x1,
+      y: y2 - y1
+    }
+
+    norm = %{
+      x: -vec.y,
+      y: vec.x
+    }
+
+    {
+      x1 + xp * vec.x + yp * norm.x,
+      y1 + xp * vec.y + yp * norm.y
+    }
+  end
+
+  defp line({x1, y1}, {x2, y2}) do
+    """
+    <line x1="#{x1}" y1="#{y1}" x2="#{x2}" y2="#{y2}" stroke="black" />
+    """
+  end
+
+  defp rec(_p1, _p2, _lines, _iteration, 0 = _ttl) do
+    ""
+  end
+
+  defp rec(p1, p2, lines, iteration, ttl) do
+    lines
+    |> Enum.map(fn {e1, e2} ->
+      mp1 = map_point(p1, p2, e1)
+      mp2 = map_point(p1, p2, e2)
+      current = line(mp1, mp2)
+      tail = rec(mp1, mp2, lines, iteration, ttl - 1)
+
+      case {iteration, ttl} do
+        {:last, 1} ->
+          current
+
+        {:last, _} ->
+          tail
+
+        _ ->
+          current <> " " <> tail
+      end
+    end)
+    |> Enum.join("\n")
+  end
+
+  def render(width, height, config) do
+    {x1, y1} = {config.x1 * width, config.y1 * height}
+    {x2, y2} = {config.x2 * width, config.y2 * height}
+    depth = config.depth
+    lines = config.lines
+    iteration = Map.get(config, :iteration, :all)
+
+    rec({x1, y1}, {x2, y2}, lines, iteration, depth)
+  end
+
+  def as_anon() do
+    fn width, height, context -> render(width, height, context) end
+  end
+end
+```
+
+```elixir
+defmodule Canvas do
+  def norender(width, height, renderer, context) do
+    contents = renderer.(width, height, context)
+
+    """
+    <svg viewBox="0 0 #{width} #{height}" xmlns="http://www.w3.org/2000/svg">#{contents}</svg>
+    """
+  end
+
+  def render(width, height, renderer, context) do
+    norender(width, height, renderer, context)
+    |> Kino.Image.new(:svg)
+  end
+
+  def render_in_kino(renderer, context) do
+    Kino.Frame.new()
+    |> Kino.render()
+    |> Kino.Frame.render(render(800, 600, renderer, context))
+  end
+end
+```
+
+## Case 1
+
+Config:
+
+```elixir
+config_a = %{
+  x1: 1 / 10,
+  y1: 1 / 3,
+  x2: 9 / 10,
+  y2: 1 / 3,
+  depth: 5,
+  iteration: :last,
+  lines: [
+    {{0, 0}, {1 / 3, 0}},
+    {{1 / 3, 0}, {1 / 2, 1 / 3}},
+    {{1 / 2, 1 / 3}, {2 / 3, 0}},
+    {{2 / 3, 0}, {1, 0}}
+  ]
+}
+```
+
+Rendering:
+
+```elixir
+Canvas.render_in_kino(LSystem.as_anon(), config_a)
+```
+
+## Case 2 - Some Plant
+
+Config:
+
+```elixir
+config_b = %{
+  x1: 2 / 4,
+  y1: 8 / 8,
+  x2: 2 / 4,
+  y2: 7.5 / 8,
+  depth: 8,
+  lines: [
+    {{1 / 4, 0}, {2 / 4, 1 / 8}},
+    {{1 / 2, 0}, {1, -1 / 4}},
+    {{3 / 4, 0}, {2, 1 / 8}}
+  ]
+}
+```
+
+Rendering:
+
+```elixir
+Canvas.render_in_kino(LSystem.as_anon(), config_b)
+```
+
+## Case 3 - Sierpinski Triangle
+
+Config:
+
+```elixir
+ystep = :math.sin(60 / 360 * 2 * :math.pi()) * 2 / 8
+
+config_c = %{
+  x1: 7 / 10,
+  y1: 4 / 5,
+  x2: 3 / 10,
+  y2: 4 / 5,
+  depth: 5,
+  iteration: :last,
+  lines: [
+    {{0 / 8, 0 * ystep}, {2 / 8, 0 * ystep}},
+    # reversed
+    {{3 / 8, 1 * ystep}, {2 / 8, 0 * ystep}},
+    {{3 / 8, 1 * ystep}, {2 / 8, 2 * ystep}},
+    # reversed
+    {{3 / 8, 3 * ystep}, {2 / 8, 2 * ystep}},
+    {{3 / 8, 3 * ystep}, {5 / 8, 3 * ystep}},
+    # reversed
+    {{6 / 8, 2 * ystep}, {5 / 8, 3 * ystep}},
+    {{6 / 8, 2 * ystep}, {5 / 8, 1 * ystep}},
+    # reversed
+    {{6 / 8, 0 * ystep}, {5 / 8, 1 * ystep}},
+    {{6 / 8, 0 * ystep}, {8 / 8, 0 * ystep}}
+  ]
+}
+```
+
+Rendering:
+
+```elixir
+Canvas.render_in_kino(LSystem.as_anon(), config_c)
+```
+
+Case 4 - Quarter Snowflake
+
+```elixir
+ystep =
+  config_d = %{
+    x1: 9 / 10,
+    y1: 4 / 5,
+    x2: 1 / 10,
+    y2: 4 / 5,
+    depth: 6,
+    iteration: :last,
+    lines: [
+      {{0 / 3, 0 / 3}, {1 / 3, 0 / 3}},
+      {{1 / 3, 0 / 3}, {1 / 3, 1 / 3}},
+      {{1 / 3, 1 / 3}, {2 / 3, 1 / 3}},
+      {{2 / 3, 1 / 3}, {2 / 3, -0 / 3}},
+      {{2 / 3, 0 / 3}, {3 / 3, 0 / 3}}
+    ]
+  }
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Canvas.render_in_kino(LSystem.as_anon(), config_d)
+```
+
+## Debug
+
+```elixir
+Canvas.norender(400, 300, LSystem.as_anon(), config_a)
+```
