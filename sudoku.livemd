@@ -1,0 +1,282 @@
+# Sūdoku
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.1"}
+])
+```
+
+## Introduction
+
+[Sūdoku](https://en.wikipedia.org/wiki/Sudoku) is a puzzle-style game rooted in a grid that has $n^2 \times n^2$ cells. The fields are split into $n$ rectangular groups of $n \times n$ cells. These groups are perfectly overlaid the grid in a $n \times n$ pattern.
+
+A solved puzzle adheres to the following three rules:
+
+1. Each row must have all numbers $1..n^2$ present.
+2. Each column must have all numbers $1..n^2$ present.
+3. Each group must have all numbers $1..n^2$ present.
+
+An *unsolved* puzzle is a solved puzzle where a subset of the cells have been blanked out.
+
+This LiveBook implements the common 3-Sūdoku. That is a Sūdoku where $n=3$. Such puzzles deal with a $9 \times 9$ grid where 9 occurrences of each $1..9$ number needs to be placed.
+
+## Sample Puzzles
+
+```elixir
+sample_puzzles = [
+  "4...3.......6..8..........1....5..9..8....6...7.2........1.27..5.3....4.9........",
+  "7.8...3.....2.1...5.........4.....263...8.......1...9..9.6....4....7.5...........",
+  "7.8...3.....6.1...5.........4.....263...8.......1...9..9.2....4....7.5...........",
+  "3.7.4...........918........4.....7.....16.......25..........38..9....5...2.6.....",
+  "5..7..6....38...........2..62.4............917............35.8.4.....1......9...."
+]
+```
+
+## Puzzle Module
+
+Module for loading, representing, solving, validation of solution and visualizing of Sūdoku puzzles:
+
+```elixir
+defmodule Puzzle do
+  @size 600
+  @border 10
+  @fontsize 28
+
+  defstruct data: nil
+
+  # interface functions
+
+  def from_string(string) do
+    data =
+      string
+      |> String.graphemes()
+      |> Enum.map(fn g -> if g == ".", do: nil, else: Integer.parse(g) |> elem(0) end)
+      |> Enum.chunk_every(9)
+
+    %Puzzle{data: data}
+  end
+
+  def as_svg(puzzle) do
+    lines =
+      1..8
+      |> Enum.map(fn i ->
+        dyn = @border + i * (@size - 2 * @border) / 9
+        sw = if rem(i, 3) == 0, do: 4, else: 2
+
+        ~c"<line x1=\"#{@border}\" y1=\"#{dyn}\"
+               x2=\"#{@size - @border}\" y2=\"#{dyn}\"
+               stroke=\"black\" stroke-width=\"#{sw}\" />\n" ++
+          ~c"<line y1=\"#{@border}\" x1=\"#{dyn}\"
+               y2=\"#{@size - @border}\" x2=\"#{dyn}\"
+               stroke=\"black\" stroke-width=\"#{sw}\" />\n"
+      end)
+
+    labels =
+      puzzle.data
+      |> Enum.with_index(fn row, y ->
+        row
+        |> Enum.with_index(fn cell, x ->
+          if cell == "." do
+            nil
+          else
+            """
+            <text x="#{@border + (x + 0.5) * (@size - 2 * @border) / 9}"
+                  y="#{@border + (y + 0.5) * (@size - 2 * @border) / 9 + @fontsize / 3}"
+                  text-anchor="middle" font-size="#{@fontsize}">#{cell}</text>
+            """
+          end
+        end)
+      end)
+      |> List.flatten()
+      |> Enum.filter(fn label -> not (label == nil) end)
+      |> Enum.join()
+
+    """
+    <svg width="#{@size}" height="#{@size}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="#{@size}" height="#{@size}" style="fill:pink" />
+      <rect x="#{@border}" y="#{@border}"
+            width="#{@size - 2 * @border}" height="#{@size - 2 * @border}"
+            style="stroke:black;stroke-width:5;fill:white" />
+      #{lines}
+      #{labels}
+    </svg>
+    """
+  end
+
+  def solve(puzzle) do
+    data = puzzle.data
+    unsolved = find_unsolved(data)
+    result = solve(data, unsolved)
+
+    case result do
+      {:solved, data} ->
+        {:ok, %{puzzle | data: data}}
+
+      nil ->
+        {:failure, puzzle}
+    end
+  end
+
+  def solved?(puzzle) do
+    data = puzzle.data
+
+    0..8
+    |> Enum.all?(fn i ->
+      [
+        get_occupation(data, nil, i, :horizontal),
+        get_occupation(data, i, nil, :vertical),
+        get_occupation(data, 3 * rem(i, 3), 3 * div(i, 3), :block)
+      ]
+      |> Enum.all?(fn occupation -> MapSet.size(occupation) == 9 end)
+    end)
+
+    # {:todo, puzzle}
+  end
+
+  # utility functions
+
+  defp solve(data, []) do
+    {:solved, data}
+  end
+
+  defp solve(data, [{x, y} | rest]) do
+    get_candidates(data, x, y)
+    |> Enum.find_value(fn candidate ->
+      result =
+        set_index(data, x, y, candidate)
+        |> solve(rest)
+
+      case result do
+        {:solved, data} ->
+          {:solved, data}
+
+        failure ->
+          failure
+      end
+    end)
+  end
+
+  defp find_unsolved(data) do
+    data
+    |> Enum.with_index(fn element, y ->
+      element
+      |> Enum.with_index(fn cell, x ->
+        if cell == nil do
+          {x, y}
+        else
+          nil
+        end
+      end)
+    end)
+    |> List.flatten()
+    |> Enum.filter(fn e -> not (e == nil) end)
+  end
+
+  defp get_index(data, x, y) do
+    data
+    |> Enum.fetch!(y)
+    |> Enum.fetch!(x)
+  end
+
+  defp set_index(data, x, y, value) do
+    data
+    |> List.replace_at(
+      y,
+      List.replace_at(
+        Enum.fetch!(data, y),
+        x,
+        value
+      )
+    )
+  end
+
+  defp get_candidates(data, x, y, candidates \\ nil) do
+    candidates = if candidates == nil, do: MapSet.new(1..9), else: candidates
+
+    horizontal_occupation = get_occupation(data, x, y, :horizontal)
+    vertical_occupation = get_occupation(data, x, y, :vertical)
+    block_occupation = get_occupation(data, x, y, :block)
+
+    MapSet.difference(
+      candidates,
+      MapSet.union(horizontal_occupation, MapSet.union(vertical_occupation, block_occupation))
+    )
+    |> MapSet.to_list()
+  end
+
+  defp get_occupation(data, x, y, rule) do
+    0..8
+    |> Enum.map(fn i ->
+      {x, y} =
+        case rule do
+          :horizontal ->
+            {i, y}
+
+          :vertical ->
+            {x, i}
+
+          :block ->
+            {xorig, yorig} = {3 * div(x, 3), 3 * div(y, 3)}
+            {xdiff, ydiff} = {rem(i, 3), div(i, 3)}
+            {xorig + xdiff, yorig + ydiff}
+        end
+
+      get_index(data, x, y)
+    end)
+    |> Enum.filter(fn entry -> not (entry == nil) end)
+    |> MapSet.new()
+  end
+end
+```
+
+Load a single puzzle into `p0` and illustrate it:
+
+```elixir
+p0 = Puzzle.from_string(Enum.fetch!(sample_puzzles, 0))
+
+p0
+|> Puzzle.as_svg()
+|> Kino.Image.new(:svg)
+```
+
+## Solving
+
+Attempt to solve and measure the number of seconds it takes:
+
+```elixir
+prev = System.monotonic_time(:millisecond)
+result = Puzzle.solve(p0)
+next = System.monotonic_time(:millisecond)
+diff = (next - prev) / 1000
+```
+
+Was the result an `:ok` or a `:failure`?
+
+```elixir
+{status, p0solved} = result
+status
+```
+
+What does the solution look like?
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+p0solved
+|> Puzzle.as_svg()
+|> Kino.Image.new(:svg)
+```
+
+## Validation
+
+Does the resulting solution adhere to the rules of Sūdoku?
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Puzzle.solved?(p0solved)
+```
+
+## Generation
+
+This is left as an exercise 😏
