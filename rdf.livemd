@@ -1,0 +1,409 @@
+# Resource Description Framework
+
+```elixir
+Mix.install([
+  {:rdf, "~> 1.1"},
+  {:sparql, "~> 0.3"},
+  {:kino, "~> 0.10.0"}
+])
+```
+
+## Context
+
+Links:
+
+* [RDF module](https://rdf-elixir.dev/rdf-ex/) for Elixir
+* [SparQL module](https://rdf-elixir.dev/sparql-ex/) for Elixir
+
+## Convenience
+
+```elixir
+import RDF.Sigils
+```
+
+```elixir
+alias RDF.NS.{RDFS}
+```
+
+Helper function to display resultsets in a pretty way:
+
+```elixir
+result_as_table = fn ro ->
+  cols = ro.variables
+  results = ro.results
+
+  lines =
+    results
+    |> List.foldl("", fn result, acc ->
+      main =
+        cols
+        |> Enum.map(fn col -> "#{Map.get(result, col)}" end)
+        |> Enum.join(" | ")
+
+      acc <> "| #{main} |\n"
+    end)
+
+  Kino.Markdown.new("""
+  | #{cols |> Enum.join(" | ")} |
+  | #{cols |> Enum.map(fn _ -> "--" end) |> Enum.join(" | ")} |
+  #{lines}
+  """)
+end
+
+result_as_tree = fn ro ->
+  cols = ro.variables
+  results = ro.results
+
+  contents =
+    List.foldl(results, "graph LR;\n", fn result, acc ->
+      src =
+        Map.get(result, Enum.at(cols, 0))
+        |> RDF.IRI.to_string()
+        |> String.split("#")
+        |> Enum.at(-1)
+
+      dst =
+        Map.get(result, Enum.at(cols, 1))
+        |> RDF.IRI.to_string()
+        |> String.split("#")
+        |> Enum.at(-1)
+
+      acc <> "  #{src}-->#{dst};\n"
+    end)
+
+  Kino.Mermaid.new(contents)
+end
+```
+
+## Schema
+
+Vocabulary:
+
+```elixir
+defmodule Schema do
+  use RDF.Vocabulary.Namespace
+
+  @base "http://sdu.dk/ss/courses/iot/2024/schemas/"
+
+  defvocab(Data,
+    base_iri: "#{@base}data#",
+    terms: ~w[data Data hist live]
+  )
+
+  defvocab(Unit,
+    base_iri: "#{@base}unit#",
+    terms: ~w[unit Unit Unitless DegreesCelcius DegreesFahrenheit Kelvin Percentage]
+  )
+
+  defvocab(Location,
+    base_iri: "#{@base}location#",
+    terms: ~w[Location Building Floor Room contains area name adjacent]
+  )
+
+  defvocab(Modality,
+    base_iri: "#{@base}modality#",
+    terms: ~w[modality provides Modality Occupancy Temperature RelativeHumidity AbsoluteHumidity]
+  )
+
+  defvocab(Point,
+    base_iri: "#{@base}point#",
+    terms: ~w[Point Sensor PIR TemperatureSensor HumiditySensor]
+  )
+end
+```
+
+Relationships:
+
+```elixir
+schema = [
+  # data
+  Schema.Data.Data
+  |> RDFS.subClassOf(RDFS.Class),
+
+  # unit
+  Schema.Unit.Unit
+  |> RDFS.subClassOf(RDFS.Class),
+  Schema.Unit.Unitless
+  |> RDFS.subClassOf(Schema.Unit.Unit),
+  Schema.Unit.DegreesCelcius
+  |> RDFS.subClassOf(Schema.Unit.Unit),
+  Schema.Unit.DegreesFahrenheit
+  |> RDFS.subClassOf(Schema.Unit.Unit),
+  Schema.Unit.Kelvin
+  |> RDFS.subClassOf(Schema.Unit.Unit),
+  Schema.Unit.Percentage
+  |> RDFS.subClassOf(Schema.Unit.Unit),
+
+  # location
+  Schema.Location.Location
+  |> RDFS.subClassOf(RDFS.Class),
+  Schema.Location.Building
+  |> RDFS.subClassOf(Schema.Location.Location),
+  Schema.Location.Floor
+  |> RDFS.subClassOf(Schema.Location.Location),
+  Schema.Location.Room
+  |> RDFS.subClassOf(Schema.Location.Location),
+
+  # modality
+  Schema.Modality.Modality
+  |> RDFS.subClassOf(RDFS.Class),
+  Schema.Modality.Occupancy
+  |> RDFS.subClassOf(Schema.Modality.Modality),
+  Schema.Modality.Temperature
+  |> RDFS.subClassOf(Schema.Modality.Modality),
+  Schema.Modality.RelativeHumidity
+  |> RDFS.subClassOf(Schema.Modality.Modality),
+  Schema.Modality.AbsoluteHumidity
+  |> RDFS.subClassOf(Schema.Modality.Modality),
+
+  # point
+  Schema.Point.Point
+  |> RDFS.subClassOf(RDFS.Class),
+  Schema.Point.Sensor
+  |> RDFS.subClassOf(Schema.Point.Point),
+  Schema.Point.PIR
+  |> RDFS.subClassOf(Schema.Point.Sensor),
+  Schema.Point.TemperatureSensor
+  |> RDFS.subClassOf(Schema.Point.Sensor),
+  Schema.Point.HumiditySensor
+  |> RDFS.subClassOf(Schema.Point.Sensor)
+]
+```
+
+## Model
+
+```elixir
+model = "http://www.sdu.dk#"
+
+# namespaces to bind
+ns = [
+  rdfs: RDFS,
+  data: Schema.Data,
+  unit: Schema.Unit,
+  location: Schema.Location,
+  modality: Schema.Modality,
+  point: Schema.Point,
+  model: model
+]
+
+m = RDF.Graph.new(prefixes: ns)
+```
+
+Instances:
+
+<!-- livebook:{"break_markdown":true} -->
+
+Variables for relevant entities:
+
+```elixir
+floor = ~I"http://www.sdu.dk#floor3"
+roomA = ~I"http://www.sdu.dk#roomA"
+roomAocc = ~I"http://www.sdu.dk#roomA/occ"
+roomApir = ~I"http://www.sdu.dk#roomA/pir"
+roomApirData = ~I"http://www.sdu.dk#roomA/pir/data"
+roomAtemp = ~I"http://www.sdu.dk#roomA/temp"
+roomAtempData = ~I"http://www.sdu.dk#roomA/temp/data"
+roomAtc = ~I"http://www.sdu.dk#roomA/tc"
+roomAtcData = ~I"http://www.sdu.dk#roomA/tc/data"
+roomArhum = ~I"http://www.sdu.dk#roomA/rhum"
+roomAhum = ~I"http://www.sdu.dk#roomA/hum"
+roomAhumData = ~I"http://www.sdu.dk#roomA/hum/data"
+roomB = ~I"http://www.sdu.dk#roomB"
+roomBocc = ~I"http://www.sdu.dk#roomB/occ"
+roomBpir = ~I"http://www.sdu.dk#roomB/pir"
+roomBpirData = ~I"http://www.sdu.dk#roomB/pir/data"
+roomBtemp = ~I"http://www.sdu.dk#roomB/temp"
+roomBtempData = ~I"http://www.sdu.dk#roomA/temp/data"
+roomBtc = ~I"http://www.sdu.dk#roomB/tc"
+roomBtcData = ~I"http://www.sdu.dk#roomB/tc/data"
+roomBrhum = ~I"http://www.sdu.dk#roomB/rhum"
+roomBhum = ~I"http://www.sdu.dk#roomB/hum"
+roomBhumData = ~I"http://www.sdu.dk#roomB/hum/data"
+```
+
+Add relationships:
+
+```elixir
+model =
+  schema ++
+    [
+      # floors
+      floor
+      |> RDF.type(Schema.Location.Floor)
+      |> Schema.Location.name(~L"3rd")
+      |> Schema.Location.contains(roomA)
+      |> Schema.Location.contains(roomB),
+
+      # rooms
+      roomA
+      |> RDF.type(Schema.Location.Room)
+      |> Schema.Location.area(~L"17")
+      |> Schema.Modality.modality(roomAocc)
+      |> Schema.Modality.modality(roomAtemp)
+      |> Schema.Modality.modality(roomArhum)
+      |> Schema.Location.adjacent(roomB),
+      roomB
+      |> RDF.type(Schema.Location.Room)
+      |> Schema.Location.area(~L"23")
+      |> Schema.Modality.modality(roomBocc)
+      |> Schema.Modality.modality(roomBtemp)
+      |> Schema.Modality.modality(roomBrhum)
+      |> Schema.Location.adjacent(roomA),
+
+      # modalities
+      roomAocc
+      |> RDF.type(Schema.Modality.Occupancy),
+      roomAtemp
+      |> RDF.type(Schema.Modality.Temperature),
+      roomArhum
+      |> RDF.type(Schema.Modality.RelativeHumidity),
+      roomBocc
+      |> RDF.type(Schema.Modality.Occupancy),
+      roomBtemp
+      |> RDF.type(Schema.Modality.Temperature),
+      roomBrhum
+      |> RDF.type(Schema.Modality.RelativeHumidity),
+
+      # pir sensors
+      roomApir
+      |> RDF.type(Schema.Point.PIR)
+      |> Schema.Unit.unit(Schema.Unit.Unitless)
+      |> Schema.Data.data(roomApirData)
+      |> Schema.Modality.provides(roomAocc),
+      roomBpir
+      |> RDF.type(Schema.Point.PIR)
+      |> Schema.Unit.unit(Schema.Unit.Unitless)
+      |> Schema.Data.data(roomBpirData)
+      |> Schema.Modality.provides(roomBocc),
+
+      # temperature sensors
+      roomAtemp
+      |> RDF.type(Schema.Point.TemperatureSensor)
+      |> Schema.Unit.unit(Schema.Unit.DegreesCelcius)
+      |> Schema.Data.data(roomAtempData)
+      |> Schema.Modality.provides(roomAtemp),
+      roomBtemp
+      |> RDF.type(Schema.Point.TemperatureSensor)
+      |> Schema.Unit.unit(Schema.Unit.Kelvin)
+      |> Schema.Data.data(roomBtempData)
+      |> Schema.Modality.provides(roomBtemp),
+
+      # humidity sensors
+      roomAhum
+      |> RDF.type(Schema.Point.HumiditySensor)
+      |> Schema.Unit.unit(Schema.Unit.Percentage)
+      |> Schema.Data.data(roomAhumData)
+      |> Schema.Modality.provides(roomArhum),
+      roomBhum
+      |> RDF.type(Schema.Point.HumiditySensor)
+      |> Schema.Unit.unit(Schema.Unit.Percentage)
+      |> Schema.Data.data(roomBhumData)
+      |> Schema.Modality.provides(roomBrhum),
+
+      # data
+      roomApirData
+      |> RDF.type(Schema.Data.Data)
+      |> Schema.Data.hist(~L"24")
+      |> Schema.Data.live(~L"5a3573c3"),
+      roomBpirData
+      |> RDF.type(Schema.Data.Data)
+      |> Schema.Data.hist(~L"28")
+      |> Schema.Data.live(~L"92d17015"),
+      roomAtempData
+      |> RDF.type(Schema.Data.Data)
+      |> Schema.Data.hist(~L"12")
+      |> Schema.Data.live(~L"17c5ae15"),
+      roomBtempData
+      |> RDF.type(Schema.Data.Data)
+      |> Schema.Data.hist(~L"37")
+      |> Schema.Data.live(~L"b0bc97af"),
+      roomAhumData
+      |> RDF.type(Schema.Data.Data)
+      |> Schema.Data.hist(~L"13")
+      |> Schema.Data.live(~L"65d0be73"),
+      roomBhumData
+      |> RDF.type(Schema.Data.Data)
+      |> Schema.Data.hist(~L"22")
+      |> Schema.Data.live(~L"06ef2490")
+    ]
+```
+
+```elixir
+model = model |> RDF.Graph.new() |> RDF.Graph.add_prefixes(ns)
+```
+
+## Serialize
+
+If we want to store the file to disk:
+
+```elixir
+model |> RDF.Turtle.write_string!() |> IO.puts()
+```
+
+## Queries
+
+Room sizes:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+q = "
+  PREFIX location: <http://sdu.dk/ss/courses/iot/2024/schemas/location#>
+  
+  SELECT ?area
+  WHERE {
+    ?room a location:Room .
+    ?room location:area ?area .
+  }
+"
+
+SPARQL.execute_query(model, q)
+|> result_as_table.()
+```
+
+Per-floor combinations of temperature and relative humidity data:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+q = "
+  PREFIX location: <http://sdu.dk/ss/courses/iot/2024/schemas/location#>
+  PREFIX modality: <http://sdu.dk/ss/courses/iot/2024/schemas/modality#>
+  
+  SELECT ?name ?temp ?rhum
+  WHERE {
+    ?floor a location:Floor .
+    ?room a location:Room .
+    ?temp_mod a modality:Temperature .
+    ?rhum_mod a modality:RelativeHumidity .
+
+    ?floor location:name ?name .
+    ?floor location:contains ?room .
+
+    ?room modality:modality ?temp_mod .
+    ?temp modality:provides ?temp_mod .
+
+    ?room modality:modality ?rhum_mod .
+    ?rhum modality:provides ?rhum_mod .
+  }
+"
+
+SPARQL.execute_query(model, q)
+|> result_as_table.()
+```
+
+Class hierarchy:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+q = "
+  SELECT ?sub ?super
+  WHERE {
+    ?sub rdfs:subClassOf ?super .
+  }
+"
+
+SPARQL.execute_query(model, q)
+|> result_as_tree.()
+```
