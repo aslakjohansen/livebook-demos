@@ -1,0 +1,150 @@
+# Mandelbrot
+
+```elixir
+Mix.install([
+  {:nx, "~> 0.4.1"},
+  {:stb_image, "~> 0.6.0"},
+  {:kino, "~> 0.11.3"},
+  {:tint, "~> 1.1"}
+])
+```
+
+## Introduction
+
+Inspiration:
+
+* [Wikipedia: Plotting Algorithms for the Mandelbrot Set](https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set)
+* [Image Processing in Elixir](https://genericjam.com/blog/image-processing)
+
+## Setup
+
+Mandelbrot scale (which Mandelbrot window to calculate):
+
+```elixir
+west = -2.00
+east = 0.6
+north = 1.2
+south = -1.2
+{west, east, north, south}
+```
+
+```elixir
+{mb_width, mb_height} = {east - west, north - south}
+```
+
+Canvas size:
+
+```elixir
+{canvas_width, canvas_height} = {trunc(mb_width * 300), trunc(mb_height * 300)}
+```
+
+Iteration limit:
+
+```elixir
+max_iterations = 360
+```
+
+Which palette should be used for coloring:
+
+```elixir
+palette_input = Kino.Input.select("Palette", hue: "Hue", greyscale: "Greyscale")
+```
+
+## Palette
+
+Greyscale palette:
+
+```elixir
+palette_greyscale = fn value, max ->
+  index = trunc(255 * value / max)
+  [index, index, index]
+end
+```
+
+Hue-based palette
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+palette_hue = fn
+  max, max ->
+    [0, 0, 0]
+
+  value, max ->
+    Tint.HSV.new(359.9999 * value / max, 1, 1)
+    |> Tint.to_rgb()
+    |> Tint.RGB.to_tuple()
+    |> Tuple.to_list()
+end
+```
+
+Pick selected palette:
+
+```elixir
+palette =
+  case Kino.Input.read(palette_input) do
+    :greyscale -> palette_greyscale
+    :hue -> palette_hue
+  end
+```
+
+## Calculation
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+mandelbrot = fn canvas_x, canvas_y, maxi ->
+  x0 = west + canvas_x / canvas_width * mb_width
+  y0 = south + canvas_y / canvas_height * mb_height
+
+  recurser = fn recurser, x0, y0, x, y, i, maxi ->
+    case {x * x + y * y, i < maxi} do
+      {value, true} when value <= 4 ->
+        xtemp = x * x - y * y + x0
+        y = 2 * x * y + y0
+        x = xtemp
+        recurser.(recurser, x0, y0, x, y, i + 1, maxi)
+
+      _ ->
+        i
+    end
+  end
+
+  recurser.(recurser, x0, y0, 0.0, 0.0, 0, maxi)
+end
+```
+
+This is going to take some time (33 min on my laptop):
+
+```elixir
+data =
+  0..(canvas_height - 1)
+  |> Enum.map(fn y ->
+    0..(canvas_width - 1)
+    |> Enum.map(fn x ->
+      mandelbrot.(x, y, max_iterations)
+      |> palette.(max_iterations)
+    end)
+  end)
+```
+
+## Rendering
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+image =
+  Nx.tensor(
+    data,
+    type: {:u, 8},
+    names: [:height, :width, :channels]
+  )
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+StbImage.from_nx(image)
+|> StbImage.to_binary(:png)
+|> Kino.Image.new("image/png")
+```

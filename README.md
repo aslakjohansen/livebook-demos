@@ -10,6 +10,7 @@ Modules:
 
 Well-known problems:
 - [L-Systems](lsystem.livemd)
+- [Mandelbrot Fractal](mandelbrot.livemd)
 - [Sūdoku](sudoku.livemd)
 - [Traveling Salesman Problem](tsp.livemd)
 
