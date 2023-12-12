@@ -5,7 +5,8 @@ Mix.install([
   {:nx, "~> 0.4.1"},
   {:stb_image, "~> 0.6.0"},
   {:kino, "~> 0.11.3"},
-  {:tint, "~> 1.1"}
+  {:tint, "~> 1.1"},
+  {:flow, "~> 1.2"}
 ])
 ```
 
@@ -40,19 +41,31 @@ Canvas size:
 
 Iteration limit:
 
+<!-- livebook:{"reevaluate_automatically":true} -->
+
 ```elixir
 max_iterations = 360
 ```
 
-Which palette should be used for coloring:
+<!-- livebook:{"reevaluate_automatically":true} -->
 
 ```elixir
-palette_input = Kino.Input.select("Palette", hue: "Hue", greyscale: "Greyscale")
+palette_input = Kino.Input.select("Palette for coloring:", hue: "Hue", greyscale: "Greyscale")
+```
+
+```elixir
+method_input =
+  Kino.Input.select("Calculation method:",
+    flow: "Concurrently with 'flow' (9 min on my laptop)",
+    serial: "Serial (33 min on my laptop)"
+  )
 ```
 
 ## Palette
 
 Greyscale palette:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
 
 ```elixir
 palette_greyscale = fn value, max ->
@@ -88,7 +101,7 @@ palette =
   end
 ```
 
-## Calculation
+## Mandelbrot Function
 
 <!-- livebook:{"reevaluate_automatically":true} -->
 
@@ -114,10 +127,10 @@ mandelbrot = fn canvas_x, canvas_y, maxi ->
 end
 ```
 
-This is going to take some time (33 min on my laptop):
+## Methods
 
 ```elixir
-data =
+method_serial = fn canvas_height, canvas_width, max_iterations ->
   0..(canvas_height - 1)
   |> Enum.map(fn y ->
     0..(canvas_width - 1)
@@ -126,6 +139,47 @@ data =
       |> palette.(max_iterations)
     end)
   end)
+end
+```
+
+```elixir
+method_flow = fn canvas_height, canvas_width, max_iterations ->
+  0..(canvas_height - 1)
+  |> Flow.from_enumerable(min_demand: 1, max_demand: 20)
+  |> Flow.map(fn y ->
+    payload =
+      0..(canvas_width - 1)
+      |> Enum.map(fn x ->
+        mandelbrot.(x, y, max_iterations)
+        |> palette.(max_iterations)
+      end)
+
+    {y, payload}
+  end)
+  |> Enum.to_list()
+  |> Enum.sort(fn {i1, _}, {i2, _} -> i1 >= i2 end)
+  |> Enum.map(fn {_, p} -> p end)
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+method =
+  case Kino.Input.read(method_input) do
+    :serial -> method_serial
+    :flow -> method_flow
+  end
+```
+
+## Calculate
+
+This is the part that takes time:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+data = method.(canvas_height, canvas_width, max_iterations)
 ```
 
 ## Rendering
