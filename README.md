@@ -14,3 +14,6 @@ Well-known problems:
 - [Sūdoku](sudoku.livemd)
 - [Traveling Salesman Problem](tsp.livemd)
 
+Tools:
+- [Timestamp and log lines received over a socket](socket.livemd)
+
