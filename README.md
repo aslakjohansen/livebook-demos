@@ -2,7 +2,7 @@
 
 A collection of [LiveBook](https://livebook.dev) demos.
 
-Language features:
+([Elixir](https://elixir-lang.org)) language features:
 - [Protocols](protocols.livemd)
 
 Modules:
