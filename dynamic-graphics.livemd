@@ -1,0 +1,210 @@
+# Dynamic Graphics
+
+```elixir
+Mix.install([
+  {:nx, "~> 0.4.1"},
+  {:stb_image, "~> 0.6.0"},
+  {:kino, "~> 0.12.0"}
+])
+```
+
+## Introduction
+
+This document demonstrates one method of dynamically updating graphics (be it SVG vector graphics or bitmapped) within a livebook. It works by replacing the contents of a [Kino.Frame](https://hexdocs.pm/kino/0.12.0/Kino.Frame.html).
+
+While it certainly serves a purpose, if does flicker when updated.
+
+References:
+
+* [Dimitris Zorbas: Livebook Animations](https://zorbash.com/post/livebook-animations/)
+
+## Vector Graphics with SVG
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule VectorGraphics do
+  use GenServer
+
+  @dim 256
+  @shrink 0.7
+
+  # interface
+
+  def start_link(widget) do
+    GenServer.start_link(__MODULE__, {widget, 0})
+  end
+
+  def render(pid, widget) do
+    GenServer.cast(pid, {:render, widget})
+  end
+
+  # callbacks
+
+  @impl true
+  def init(state) do
+    delay_message({:tick})
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_info({:tick}, {widget, i} = _state) do
+    Kino.Frame.render(widget, generate_svg(i))
+    delay_message({:tick})
+    {:noreply, {widget, i + 1}}
+  end
+
+  @impl true
+  def handle_cast({:render, widget}, {_widget, i} = state) do
+    Kino.Frame.render(widget, generate_svg(i))
+    {:noreply, state}
+  end
+
+  # helpers
+
+  defp generate_svg(i) do
+    """
+    <svg viewBox="0 0 #{@dim} #{@dim}" xmlns="http://www.w3.org/2000/svg">
+      <rect width="#{@dim * @shrink}" height="#{@dim * @shrink}"
+            x="#{@dim * (1 - @shrink) / 2}" y="#{@dim * (1 - @shrink) / 2}"
+            style="fill:rgb(255,255,255);stroke:rgb(0,0,0)"
+            transform="rotate(#{i}, #{@dim / 2}, #{@dim / 2})" />
+    </svg>
+    """
+    |> Kino.Image.new(:svg)
+  end
+
+  def delay_message(message, time \\ 1000) do
+    Process.send_after(self(), message, time)
+  end
+end
+```
+
+## Bitmapped Graphics with PNG
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule BitmappedGraphics do
+  use GenServer
+
+  # interface
+
+  def start_link(widget) do
+    GenServer.start_link(__MODULE__, {widget, 0})
+  end
+
+  def render(pid, widget) do
+    GenServer.cast(pid, {:render, widget})
+  end
+
+  # callbacks
+
+  @impl true
+  def init(state) do
+    delay_message({:tick})
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_info({:tick}, {widget, i} = _state) do
+    Kino.Frame.render(widget, generate_png(i))
+    delay_message({:tick})
+    {:noreply, {widget, rem(i + 1, 256)}}
+  end
+
+  @impl true
+  def handle_cast({:render, widget}, {_widget, i} = state) do
+    Kino.Frame.render(widget, generate_png(i))
+    {:noreply, state}
+  end
+
+  # helpers
+
+  defp generate_png(i) do
+    data =
+      0..255
+      |> Enum.map(fn y ->
+        0..255
+        |> Enum.map(fn x ->
+          [x, y, i]
+        end)
+      end)
+
+    image =
+      Nx.tensor(
+        data,
+        type: {:u, 8},
+        names: [:height, :width, :channels]
+      )
+
+    StbImage.from_nx(image)
+    |> StbImage.to_binary(:png)
+    |> Kino.Image.new("image/png")
+  end
+
+  def delay_message(message, time \\ 200) do
+    Process.send_after(self(), message, time)
+  end
+end
+```
+
+## Config
+
+```elixir
+type_input =
+  Kino.Input.select("Graphic type",
+    vector: "Vector (SVG)",
+    bitmapped: "Bitmapped (PNG)"
+  )
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+type =
+  case Kino.Input.read(type_input) do
+    :vector -> VectorGraphics
+    :bitmapped -> BitmappedGraphics
+  end
+```
+
+## Push-Based Animation
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+push_widget = Kino.Frame.new() |> Kino.render()
+nil
+```
+
+Start the chosen `GenServer`:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{:ok, pid} = type.start_link(push_widget)
+```
+
+## Pull-Based Animation
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+pull_widget = Kino.Frame.new() |> Kino.render()
+nil
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+type.render(pid, pull_widget)
+```
+
+## Conclusion
+
+There are some problems in this way of *animating*, namely:
+
+* Full SVGs or PNGs are being replaced. That is a heavy operation.
+* When replacing such an element there is a moment when no element is present (previous element has been removed, but new element is not yet there). This causes a flickering effect.
+* I seem to have to make cells that produce `Kino.Frame` evaluate to `nil` to avoid duplicating the rendered contents.

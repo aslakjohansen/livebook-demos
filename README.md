@@ -17,3 +17,6 @@ Well-known problems:
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)
 
+Useful techniques:
+- [Dynamic graphics (both vector and bitmapped)](dynamic-graphics.livemd)
+
