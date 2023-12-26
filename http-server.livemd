@@ -1,0 +1,133 @@
+# HTTP Server
+
+## Introduction
+
+**Note:** This code exposes an HTTP server capable of downloading files from the root of your filesystem. It implements no security beyond what is offered by the underlying operating system.
+
+## Simple HTTP Server
+
+Server itself:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule SimpleHttpServer do
+  use GenServer
+
+  ## interface
+
+  def start_link(port) do
+    GenServer.start_link(__MODULE__, port)
+  end
+
+  ## callbacks
+
+  @impl true
+  def init(port) do
+    {:ok, socket} = :gen_tcp.listen(port, [:binary, packet: :line, active: true, reuseaddr: true])
+    IO.puts("Listening to #{port}")
+    send(self(), :accept)
+    {:ok, %{socket: socket}}
+  end
+
+  @impl true
+  def handle_info(:accept, %{socket: socket} = state) do
+    {:ok, _client} = :gen_tcp.accept(socket)
+
+    IO.puts("Client connected")
+    {:noreply, Map.put(state, :recv_state, :request)}
+  end
+
+  @impl true
+  def handle_info({:tcp, socket, data}, %{recv_state: recv_state} = state) do
+    state =
+      case {recv_state, data} do
+        {:request, _} ->
+          [method, path, proto] = String.split(data)
+
+          state_update = %{
+            recv_state: :header,
+            method: method,
+            path: path,
+            proto: proto,
+            headers: %{}
+          }
+
+          Map.merge(state, state_update)
+
+        {:header, "\r\n"} ->
+          case Map.fetch!(state, :method) do
+            "GET" ->
+              process_get(socket, state)
+              state
+
+            "PUT" ->
+              Map.put(state, :recv_state, :body)
+          end
+
+        {:header, data} ->
+          [key, value] =
+            data
+            |> String.replace_suffix("\r\n", "")
+            |> String.split(": ", parts: 2)
+
+          Map.put(state, key, value)
+
+        {:body, _data} ->
+          nil
+      end
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:tcp_closed, _}, state), do: {:stop, :normal, state}
+
+  @impl true
+  def handle_info({:tcp_error, _}, state), do: {:stop, :normal, state}
+
+  ## helpers
+
+  defp send_response(socket, status, message) do
+    human_status = %{
+      200 => "OK",
+      501 => "Not Implemented"
+    }
+
+    response =
+      [
+        "HTTP/1.1 #{status} #{Map.get(human_status, status)}",
+        "Content-Length: #{String.length(message)}",
+        "",
+        ""
+      ]
+      |> Enum.join("\r\n")
+      |> (fn s -> s <> message end).()
+
+    :ok = :gen_tcp.send(socket, response)
+    :ok = :gen_tcp.close(socket)
+    send(self(), :accept)
+  end
+
+  defp process_get(socket, state) do
+    path = state.path
+
+    case File.stat(path) do
+      {:ok, stat} when stat.type == :regular ->
+        {:ok, contents} = File.read(path)
+        send_response(socket, 200, contents)
+
+      _ ->
+        send_response(socket, 501, "Don't know what to do with path '#{path}'")
+    end
+  end
+end
+```
+
+Start server:
+
+```elixir
+{:ok, pid} = SimpleHttpServer.start_link(8876)
+```
+
+Now, issue an `HTTP GET` request against this port. The part of the URL after the port is mapped to your root filesystem.

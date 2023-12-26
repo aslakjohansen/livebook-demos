@@ -16,6 +16,7 @@ Well-known problems:
 
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)
+- [HTTP server supporting GET requests against root filesystem](http-server.livemd)
 
 Useful techniques:
 - [Dynamic graphics (both vector and bitmapped)](dynamic-graphics.livemd)
