@@ -9,6 +9,7 @@ Modules:
 - [RDF](rdf.livemd)
 
 Well-known problems:
+- [Dining Philosophers](dining-philosopers.livemd)
 - [L-Systems](lsystem.livemd)
 - [Mandelbrot Fractal](mandelbrot.livemd)
 - [Sūdoku](sudoku.livemd)

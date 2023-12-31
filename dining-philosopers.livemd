@@ -1,0 +1,562 @@
+# Dining Philosophers Problem
+
+```elixir
+Mix.install([
+  {:mutex, "~> 1.3"},
+  {:kino, "~> 0.11.3"}
+])
+```
+
+## Introduction
+
+This is an implementation (and visualization) of the [Dining Philosophers Problem](https://en.wikipedia.org/wiki/Dining_philosophers_problem). It employs [two-phase locking](https://en.wikipedia.org/wiki/Two-phase_locking) with a strict locking order to avoid deadlocks.
+
+## Configuration
+
+How many philosophers to seat?
+
+```elixir
+size = 5
+```
+
+## State Visualization
+
+```elixir
+defmodule State do
+  use GenServer
+
+  @scene_size 500
+  @pfactor 0.7
+  @r 30
+  @sw 2
+
+  @green "rgb(128,255,128)"
+  @yellow "rgb(192,192,0)"
+  @darkyellow "rgb(127,127,0)"
+  @blue "rgb(192,192,255)"
+  @red "rgb(255,192,192)"
+  @darkred "rgb(127,31,31)"
+  @black "rgb(0,0,0)"
+
+  # interface
+
+  def start_link(widget, size) do
+    GenServer.start_link(__MODULE__, %{widget: widget, size: size})
+  end
+
+  def change_state(pid, philosopher, new_state) do
+    GenServer.cast(pid, {:state_change, philosopher, new_state})
+  end
+
+  def debug_connection(pid, philosopher, direction) do
+    GenServer.cast(pid, {:debug_connection, philosopher, direction})
+  end
+
+  # callbacks
+
+  @impl true
+  def init(%{widget: widget, size: size} = state) do
+    is = 0..(size - 1)
+
+    philosophers =
+      is
+      |> Enum.map(fn i -> {i, :prestart} end)
+      |> Map.new()
+
+    philosopher_positions = calc_philosopher_positions(size, is)
+    fork_positions = calc_fork_positions(size, is)
+    connection_map = calc_connection_map(size, is, philosopher_positions, fork_positions)
+
+    update(widget, is, size, philosophers, philosopher_positions, fork_positions, connection_map)
+
+    state_update = %{
+      is: is,
+      philosophers: philosophers,
+      philosopher_positions: philosopher_positions,
+      fork_positions: fork_positions,
+      connection_map: connection_map
+    }
+
+    {:ok, Map.merge(state, state_update)}
+  end
+
+  @impl true
+  def handle_cast({:state_change, philosopher, new_state}, state) do
+    philosophers = Map.put(state.philosophers, philosopher, new_state)
+
+    widget = state.widget
+    is = state.is
+    size = state.size
+    philosopher_positions = state.philosopher_positions
+    fork_positions = state.fork_positions
+    connection_map = state.connection_map
+
+    update(widget, is, size, philosophers, philosopher_positions, fork_positions, connection_map)
+
+    state = Map.put(state, :philosophers, philosophers)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:debug_connection, philosopher_i, direction}, state) do
+    philosophers = state.philosophers
+    widget = state.widget
+    is = state.is
+    size = state.size
+    philosopher_positions = state.philosopher_positions
+    fork_positions = state.fork_positions
+    connection_map = state.connection_map
+
+    {{px_bef, py_bef}, {fx_bef, fy_bef}} = Map.get(connection_map, {philosopher_i, direction})
+
+    prefix =
+      """
+      <line x1=\"#{px_bef}\" y1=\"#{py_bef}\" x2=\"#{fx_bef}\" y2=\"#{fy_bef}\" stroke=\"blue\" stroke-width=\"2\" />
+      """
+
+    update(
+      widget,
+      is,
+      size,
+      philosophers,
+      philosopher_positions,
+      fork_positions,
+      connection_map,
+      prefix
+    )
+
+    {:noreply, state}
+  end
+
+  # helpers
+
+  defp update(
+         widget,
+         is,
+         size,
+         philosophers,
+         philosopher_positions,
+         fork_positions,
+         connection_map,
+         prefix \\ ""
+       ) do
+    svg =
+      produce_svg(
+        is,
+        size,
+        philosophers,
+        philosopher_positions,
+        fork_positions,
+        connection_map,
+        prefix
+      )
+      |> Kino.Image.new(:svg)
+
+    widget
+    |> Kino.Frame.render(svg)
+  end
+
+  defp calc_philosopher_positions(size, is) do
+    is
+    |> Enum.map(fn i ->
+      {
+        i,
+        @scene_size / 2 + @pfactor * @scene_size / 2 * :math.cos(2 * :math.pi() / size * i),
+        @scene_size / 2 + @pfactor * @scene_size / 2 * :math.sin(2 * :math.pi() / size * i)
+      }
+    end)
+  end
+
+  defp calc_fork_positions(size, is) do
+    is
+    |> Enum.map(fn i ->
+      {
+        i,
+        @scene_size / 2 +
+          @pfactor * @scene_size / 2 * :math.cos(2 * :math.pi() / size * (i + 0.5)),
+        @scene_size / 2 +
+          @pfactor * @scene_size / 2 * :math.sin(2 * :math.pi() / size * (i + 0.5))
+      }
+    end)
+  end
+
+  defp calc_connection_map(size, is, philosopher_positions, fork_positions) do
+    is
+    |> Enum.map(fn i ->
+      {_, px, py} = Enum.at(philosopher_positions, i)
+      {_, fax, fay} = Enum.at(fork_positions, index_of_fork_a(i, size))
+      {_, fbx, fby} = Enum.at(fork_positions, index_of_fork_b(i, size))
+      {dxa, dya} = {px - fax, py - fay}
+      {dxb, dyb} = {px - fbx, py - fby}
+      da = :math.sqrt(dxa * dxa + dya * dya)
+      db = :math.sqrt(dxb * dxb + dyb * dyb)
+
+      [
+        {{i, :a},
+         {{fax + dxa / da * (da - @r), fay + dya / da * (da - @r)},
+          {fax + dxa / da * @r, fay + dya / da * @r}}},
+        {{i, :b},
+         {{fbx + dxb / db * (db - @r), fby + dyb / db * (db - @r)},
+          {fbx + dxb / db * @r, fby + dyb / db * @r}}}
+      ]
+    end)
+    |> List.flatten()
+    |> Map.new()
+  end
+
+  defp produce_philosophers(philosophers, philosopher_positions) do
+    philosopher_positions
+    |> Enum.map(fn {i, x, y} ->
+      {fill} =
+        case Map.get(philosophers, i) do
+          :prestart -> {"none"}
+          :wait_a -> {@yellow}
+          :wait_b -> {@yellow}
+          :eat -> {@red}
+          :think -> {@blue}
+          _ -> {@black}
+        end
+
+      "<circle cx=\"#{x}\" cy=\"#{y}\" r=\"#{@r}\" fill=\"#{fill}\" stroke=\"black\" stroke-width=\"#{@sw * 2}\" />" <>
+        "<text x=\"#{x}\" y=\"#{y}\" dominant-baseline=\"middle\" text-anchor=\"middle\">P
+          <tspan dx=\"-3\" dy=\"6\" font-size=\"small\">#{i}</tspan></text>"
+    end)
+    |> Enum.join()
+  end
+
+  defp produce_forks(size, philosophers, fork_positions) do
+    last = length(fork_positions) - 1
+
+    fork_positions
+    |> Enum.map(fn {i, x, y} ->
+      neighbor_info = {
+        Map.get(philosophers, index_of_phil_before(i, size)),
+        if i == 0 do
+          :wait_a
+        else
+          :wait_b
+        end,
+        Map.get(philosophers, index_of_phil_after(i, size)),
+        if i == last do
+          :wait_b
+        else
+          :wait_a
+        end
+      }
+
+      {fill, stroke} =
+        case neighbor_info do
+          {:eat, _, :eat, _} ->
+            {@red, @darkred}
+
+          {w, w, :eat, _} ->
+            {@red, @darkyellow}
+
+          {:eat, _, w, w} ->
+            {@red, @darkyellow}
+
+          {_, _, :eat, _} ->
+            {@red, @black}
+
+          {:eat, _, _, _} ->
+            {@red, @black}
+
+          {:think, _, _, _} ->
+            {@green, @black}
+
+          {_, _, :think, _} ->
+            {@green, @black}
+
+          {_a, _w1, _b, _w2} ->
+            # IO.puts("unhandled combo at #{i}: #{index_of_fork_a(i, size)}->#{a} #{index_of_fork_b(i, size)}->#{b}")
+            {@green, @black}
+        end
+
+      "<circle cx=\"#{x}\" cy=\"#{y}\" r=\"#{@r}\" fill=\"#{fill}\" stroke=\"#{stroke}\" stroke-width=\"#{@sw}\" />" <>
+        "<text x=\"#{x}\" y=\"#{y}\" dominant-baseline=\"middle\" text-anchor=\"middle\">F
+          <tspan dx=\"-3\" dy=\"6\" font-size=\"small\">#{i}</tspan></text>"
+    end)
+    |> Enum.join()
+  end
+
+  defp produce_connections(is, size, philosophers, connection_map) do
+    is
+    |> Enum.map(fn i ->
+      phil_i_before = index_of_phil_before(i, size)
+      phil_i_after = index_of_phil_after(i, size)
+      phil_state_before = philosophers |> Map.get(phil_i_before)
+      phil_state_after = philosophers |> Map.get(phil_i_after)
+
+      data = {
+        phil_i_before,
+        phil_i_after,
+        phil_state_before,
+        phil_state_after
+      }
+
+      {_flipped, coords_bef, coords_aft, state_bef, state_aft} =
+        case data do
+          {bef_i, aft_i, bef_s, aft_s} when bef_i < aft_i ->
+            bef_c =
+              Map.get(
+                connection_map,
+                {bef_i,
+                 if bef_i == 0 do
+                   :a
+                 else
+                   :b
+                 end}
+              )
+
+            aft_c = Map.get(connection_map, {aft_i, :a})
+
+            {
+              false,
+              bef_c,
+              aft_c,
+              clean_state(
+                bef_s,
+                if bef_i == 0 do
+                  :wait_a
+                else
+                  :wait_b
+                end
+              ),
+              clean_state(aft_s, :wait_a)
+            }
+
+          {bef_i, aft_i, bef_s, aft_s} ->
+            bef_c = Map.get(connection_map, {bef_i, :b})
+            aft_c = Map.get(connection_map, {aft_i, :b})
+
+            {
+              true,
+              bef_c,
+              aft_c,
+              clean_state(bef_s, :wait_b),
+              clean_state(aft_s, :wait_b)
+            }
+        end
+
+      {{px_bef, py_bef}, {fx_bef, fy_bef}} = coords_bef
+      {{px_aft, py_aft}, {fx_aft, fy_aft}} = coords_aft
+
+      {sw_mul_bef, stroke_bef} =
+        case state_bef do
+          :eat -> {2, @red}
+          :wait -> {1, @yellow}
+          _ -> {0, @black}
+        end
+
+      {sw_mul_aft, stroke_aft} =
+        case state_aft do
+          :eat -> {2, @red}
+          :wait -> {1, @darkyellow}
+          _ -> {0, @black}
+        end
+
+      # if i==4 or i==3 or i==0 do
+      #  IO.puts("f#{i} => i_bef=#{phil_i_before}@(#{phil_state_before}->#{state_bef}):#{stroke_bef} aft=#{phil_i_after}@#{state_aft} flipped=#{flipped}")
+      # end
+
+      """
+      <line x1=\"#{px_bef}\" y1=\"#{py_bef}\" x2=\"#{fx_bef}\" y2=\"#{fy_bef}\" stroke=\"#{stroke_bef}\" stroke-width=\"#{@sw * sw_mul_bef}\" />
+      <line x1=\"#{px_aft}\" y1=\"#{py_aft}\" x2=\"#{fx_aft}\" y2=\"#{fy_aft}\" stroke=\"#{stroke_aft}\" stroke-width=\"#{@sw * sw_mul_aft}\" />
+      """
+    end)
+    |> Enum.join()
+  end
+
+  defp produce_svg(
+         is,
+         size,
+         philosophers,
+         philosopher_positions,
+         fork_positions,
+         connection_map,
+         prefix
+       ) do
+    philosopher_code = produce_philosophers(philosophers, philosopher_positions)
+    fork_code = produce_forks(size, philosophers, fork_positions)
+    connection_code = produce_connections(is, size, philosophers, connection_map)
+
+    """
+    <svg viewBox="0 0 #{@scene_size} #{@scene_size}" xmlns="http://www.w3.org/2000/svg">
+      #{prefix}
+      #{connection_code}
+      #{philosopher_code}
+      #{fork_code}
+    </svg>
+    """
+  end
+
+  defp index_of_fork_a(philosopher_i, size) do
+    modifier =
+      if philosopher_i == 0 do
+        0
+      else
+        1
+      end
+
+    rem(philosopher_i + size - modifier, size)
+  end
+
+  defp index_of_fork_b(philosopher_i, size) do
+    modifier =
+      if philosopher_i == 0 do
+        1
+      else
+        0
+      end
+
+    rem(philosopher_i + size - modifier, size)
+  end
+
+  defp index_of_phil_before(fork_i, size) do
+    rem(fork_i + 0, size)
+  end
+
+  defp index_of_phil_after(fork_i, size) do
+    rem(fork_i + 1, size)
+  end
+
+  defp clean_state(state, correct) do
+    case state do
+      :eat -> :eat
+      :think -> :think
+      :wait_a = candidate when candidate == correct -> :wait
+      :wait_b = candidate when candidate == correct -> :wait
+      _ -> :unknown
+    end
+  end
+end
+```
+
+Where to draw:
+
+```elixir
+widget =
+  Kino.Frame.new()
+  |> Kino.render()
+
+nil
+```
+
+**Note 1:** In this, $P_0$ is the first philosopher, and $F_0$ is the first fork.
+
+**Note 2:** Color coding:
+
+* A **fork** is *green* when not in use and *red* when in use.
+* A **philosopher** is **red** when eating (same color as a fork in use), **yellow'ish** when wanting to eat but doesn't have two forks yet, and **blue** when thinking.
+* A **fork** is stroked **dark yellow** when a philosopher is waiting for it and **dark red** in case of a conflict (i.e., when both neightboring philosoperhs have it). The latter case should never happen.
+
+**Note 3:** It may briefly appear as a philosopher is waiting for a free fork. This is a result of the events being processed (and drawn) FIFO.
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{:ok, state_pid} = State.start_link(widget, size)
+```
+
+## Forks
+
+Forks are implemented as mutexes:
+
+```elixir
+forks =
+  1..size
+  |> Enum.map(fn i ->
+    {:ok, pid} = Mutex.start(meta: {:fork, i})
+    pid
+  end)
+```
+
+## Philosopher
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule Philosopher do
+  use GenServer
+
+  @min_eat_time 8000
+  @max_eat_time 14000
+  @min_think_time 12000
+  @max_think_time 26000
+
+  # interfaces
+
+  def start(identity, fork_a, fork_b, viz) do
+    state = [identity: identity, fork_a: fork_a, fork_b: fork_b, viz: viz]
+    GenServer.start_link(__MODULE__, state)
+  end
+
+  # callbacks
+
+  @impl true
+  def init(state) do
+    Process.send(self(), {:eat}, [])
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_info({:eat}, state) do
+    State.change_state(state[:viz], state[:identity], :wait_a)
+    lock_a = state[:fork_a] |> Mutex.await(:fork, 5_000_000)
+    State.change_state(state[:viz], state[:identity], :wait_b)
+    lock_b = state[:fork_b] |> Mutex.await(:fork, 5_000_000)
+    State.change_state(state[:viz], state[:identity], :eat)
+
+    prime({:think}, @min_eat_time, @max_eat_time)
+    new_state = state |> Keyword.merge(lock_a: lock_a, lock_b: lock_b)
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_info({:think}, state) do
+    state[:fork_b] |> Mutex.release(state[:lock_b])
+    state[:fork_a] |> Mutex.release(state[:lock_a])
+    State.change_state(state[:viz], state[:identity], :think)
+
+    prime({:eat}, @min_think_time, @max_think_time)
+    new_state = state |> Keyword.drop([:lock_a, :lock_b])
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_info(message, state) do
+    IO.puts("Unmatched info message:")
+    IO.inspect(message)
+    {:noreply, state}
+  end
+
+  # helpers
+
+  def prime(message, min_time, max_time) do
+    time = min_time + :rand.uniform(max_time - min_time) - 1
+    Process.send_after(self(), message, time)
+  end
+end
+```
+
+## Main
+
+Seat the philosophers:
+
+```elixir
+philosophers =
+  0..(size - 1)
+  |> Enum.map(fn i ->
+    {fork_a, fork_b} =
+      case {rem(i - 1 + size, size), rem(i + 0 + size, size)} do
+        {a, b} when a > b ->
+          {b, a}
+
+        {a, b} ->
+          {a, b}
+      end
+
+    {:ok, pid} = Philosopher.start(i, Enum.at(forks, fork_a), Enum.at(forks, fork_b), state_pid)
+    pid
+  end)
+```
