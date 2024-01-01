@@ -560,3 +560,12 @@ philosophers =
     pid
   end)
 ```
+
+## TODO
+
+List of improvements:
+
+* Make philosphers identify forks by pids instead of integer IDs.
+* Refactor the `produce_*` functions of the `State` module for better abstractions.
+* Add a timeline visualization style.
+* Introduce a `Visualization` [behaviour](https://elixirschool.com/en/lessons/advanced/behaviours), have both visualization styles implement it, and allow the user to switch between them.
