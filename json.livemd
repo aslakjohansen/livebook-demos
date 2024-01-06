@@ -1,0 +1,72 @@
+# JSON
+
+```elixir
+Mix.install([
+  {:jason, "~> 1.4"}
+])
+```
+
+## Introduction
+
+Note that JSON is not a particularly expressive format. It has (among others) the following restrictions:
+
+* Both integers and floats are mapped to "numbers".
+* It can only represent tree structures.
+* Elixirs atoms are mapped to "strings" and thus lost in a roundtrip. The [Jason](https://hexdocs.pm/jason/1.4.1/Jason.html) module does have mitigations for dealing with this if needed.
+* It is unclear how much escaping needs to be done as JSON implementations don't agree on the meaning of a "string". The [Jason](https://hexdocs.pm/jason/1.4.1/Jason.html#encode/2) module does have mitigations for dealing with this when needed.
+* Highlevel constructs like a pid are naturally lost in a roundtrip.
+
+## Test Cases
+
+```elixir
+test_plants = [
+  "Tomato",
+  "Chili",
+  "Cucumber",
+  "Golden Berry",
+  "blueberry",
+  "Red Pitaya"
+]
+
+test_buffy = %{
+  name: "Buffy Anne Summers",
+  born: "January 19, 1981",
+  hair: :blonde,
+  first_app: 1992,
+  portrayed_by: %{
+    film: "Kristy Swanson",
+    series: "Sarah Michelle Gellar",
+    voice: "Giselle Loren"
+  },
+  death_by: ["The Master", "Suicide", "Warren"],
+  alive: true
+}
+```
+
+## Marshalling
+
+```elixir
+{:ok, coded_plants} = Jason.encode(test_plants)
+IO.puts(coded_plants)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{:ok, coded_buffy} = Jason.encode(test_buffy, pretty: true)
+IO.puts(coded_buffy)
+```
+
+## Unmarshalling
+
+```elixir
+{:ok, result_plants} = Jason.decode(coded_plants)
+result_plants
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{:ok, result_buffy} = Jason.decode(coded_buffy)
+result_buffy
+```
