@@ -7,8 +7,8 @@ A collection of [LiveBook](https://livebook.dev) demos.
 
 Modules:
 - [RDF](rdf.livemd)
-- [Tortoise](mqtt.livemd) for communication over MQTT.
-- Jason for (JSON)[json.livemd].
+- [MQTT](mqtt.livemd) with Tortoise.
+- [JSON](json.livemd) with Jason.
 
 Well-known problems:
 - [Dining Philosophers](dining-philosopers.livemd)
