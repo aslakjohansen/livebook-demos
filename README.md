@@ -6,9 +6,9 @@ A collection of [LiveBook](https://livebook.dev) demos.
 - [Protocols](protocols.livemd)
 
 Modules:
-- [RDF](rdf.livemd)
-- [MQTT](mqtt.livemd) with Tortoise
 - [JSON](json.livemd) with Jason
+- [MQTT](mqtt.livemd) with Tortoise
+- [RDF](rdf.livemd)
 
 Well-known problems:
 - [Dining Philosophers](dining-philosopers.livemd)
