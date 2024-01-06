@@ -8,6 +8,7 @@ A collection of [LiveBook](https://livebook.dev) demos.
 Modules:
 - [JSON](json.livemd) with Jason
 - [MQTT](mqtt.livemd) with Tortoise
+- [Neo4j](neo4j.livemd) with bolt_sips
 - [RDF](rdf.livemd)
 
 Well-known problems:

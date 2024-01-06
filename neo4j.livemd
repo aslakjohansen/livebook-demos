@@ -1,0 +1,350 @@
+# Neo4J Demo
+
+```elixir
+Mix.install([
+  {:bolt_sips, "~> 2.0"},
+  {:sparql, "~> 0.3"},
+  {:kino, "~> 0.10.0"}
+])
+```
+
+## Introduction
+
+To get started, create the following docker compose file:
+
+```yaml
+version: '3'
+services:
+  neo4j:
+    environment:
+      - NEO4J_AUTH=neo4j/neo4jtest
+    image: neo4j:4.4.27
+    ports:
+      - '7474:7474'
+      - '7473:7473'
+      - '7687:7687'
+    volumes:
+      - /vol/neo4j:/data
+```
+
+Assuming that you have named the file `neo4j-docker-compose.yml`, then run:
+
+```shell
+docker-compose -f neo4j-docker-compose.yml up
+```
+
+This should make the Neo4j [web interface](http://localhost:7474) available and allow you to run this livebook.
+
+## Convenience
+
+Function for illustrating data as a graph:
+
+```elixir
+result_as_tree = fn connections ->
+  contents =
+    List.foldl(connections, "graph LR;\n", fn {src, dst}, acc ->
+      acc <> "  #{src}-->#{dst};\n"
+    end)
+
+  Kino.Mermaid.new(contents)
+end
+```
+
+Function for illustrating a Neo4j response as a table:
+
+```elixir
+result_as_table = fn response ->
+  fields = response.fields
+  results = response.results
+
+  lines =
+    results
+    |> List.foldl("", fn result, acc ->
+      main =
+        fields
+        |> Enum.map(fn field ->
+          case Map.get(result, field) do
+            %{id: id} -> "Node id #{id}"
+            res -> "#{res}"
+          end
+        end)
+        |> Enum.join(" | ")
+
+      acc <> "| #{main} |\n"
+    end)
+
+  Kino.Markdown.new("""
+  | #{fields |> Enum.join(" | ")} |
+  | #{fields |> Enum.map(fn _ -> "--" end) |> Enum.join(" | ")} |
+  #{lines}
+  """)
+end
+```
+
+Conversion from sensor type to modality:
+
+```elixir
+type2modality = %{
+  "TemperatureSensor" => "Temperature",
+  "HumiditySensor" => "RelativeHumidity",
+  "PIR" => "Occupancy"
+}
+```
+
+## Setup
+
+Establish connection:
+
+```elixir
+{:ok, neo} = Bolt.Sips.start_link(url: "bolt://neo4j:neo4jtest@127.0.0.1:7687")
+```
+
+```elixir
+Process.info(neo)
+```
+
+Get a connection (this is the handle through which we communicate):
+
+```elixir
+conn = Bolt.Sips.conn()
+```
+
+Test ping:
+
+```elixir
+Bolt.Sips.query!(conn, "RETURN 1 as n")
+```
+
+## Model Construction
+
+Clean slate:
+
+```elixir
+queries = [
+  "MATCH ()-[r]->() DELETE r",
+  "MATCH (n) DELETE n"
+]
+
+Enum.map(queries, fn query -> Bolt.Sips.query!(conn, query) end)
+```
+
+### Type Tree
+
+```elixir
+typetree = {
+  "BaseType",
+  [
+    {
+      "Location",
+      [
+        {"Building", []},
+        {"Floor", []},
+        {"Room", []}
+      ]
+    },
+    {
+      "Modality",
+      [
+        {"Temperature", []},
+        {"RelativeHumidity", []},
+        {"AbsoluteHumidity", []},
+        {"Occupancy", []}
+      ]
+    },
+    {
+      "Point",
+      [
+        {
+          "Sensor",
+          [
+            {"TemperatureSensor", []},
+            {"HumiditySensor", []},
+            {"PIR", []}
+          ]
+        }
+      ]
+    },
+    {
+      "Unit",
+      [
+        {"Unitless", []},
+        {"Kelvin", []},
+        {"DegreesCelcius", []},
+        {"DegreesFahrenheit", []},
+        {"Percentage", []}
+      ]
+    },
+    {
+      "Data",
+      []
+    }
+  ]
+}
+```
+
+```elixir
+defmodule TypeTree do
+  def establish(subtree, conn, parent \\ nil)
+
+  def establish({name, subtypes}, conn, parent) do
+    :ok = establish(name, conn, parent)
+
+    success =
+      Enum.map(subtypes, fn subtype -> establish(subtype, conn, name) end)
+      |> Enum.all?(fn result -> result == :ok end)
+
+    if success do
+      :ok
+    else
+      :error
+    end
+  end
+
+  def establish(name, conn, parent) when is_binary(name) do
+    query =
+      case parent do
+        nil ->
+          "CREATE (:Type {name: '#{name}'})"
+
+        _ ->
+          "MATCH (parent:Type {name: '#{parent}'}) MERGE (:Type {name: '#{name}'})-[:subtypeof]->(parent)"
+      end
+
+    Bolt.Sips.query!(conn, query)
+    :ok
+  end
+end
+```
+
+```elixir
+TypeTree.establish(typetree, conn)
+```
+
+### Floors
+
+```elixir
+floors = [
+  "3rd"
+]
+```
+
+```elixir
+floors
+|> Enum.map(fn floor ->
+  query = "MATCH (t:Type {name: 'Floor'}) CREATE (:Floor {name: '#{floor}'})-[:type]->(t)"
+  Bolt.Sips.query!(conn, query)
+end)
+```
+
+### Rooms
+
+```elixir
+rooms = [
+  %{floor: "3rd", area: "17 m²"},
+  %{floor: "3rd", area: "23 m²"}
+]
+```
+
+```elixir
+rooms
+|> Enum.map(fn %{floor: floor, area: area} ->
+  query = """
+    MATCH (t:Type {name: 'Room'})
+    MATCH (f:Floor {name: '#{floor}'})
+    MERGE (r:Room {area: '#{area}'})-[:type]->(t)
+    MERGE (f)-[:contains]->(r)
+  """
+
+  Bolt.Sips.query!(conn, query)
+end)
+```
+
+```elixir
+Bolt.Sips.query!(conn, "MATCH (a:Room), (b:Room) WHERE a<>b CREATE (a)-[:adjacent]->(b)")
+```
+
+### Sensors
+
+```elixir
+sensors = [
+  %{room: "17 m²", type: "TemperatureSensor", unit: "DegreesCelcius", hist: 12, live: "17c5ae15"},
+  %{room: "17 m²", type: "HumiditySensor", unit: "Percentage", hist: 13, live: "65d0be73"},
+  %{room: "17 m²", type: "PIR", unit: "Unitless", hist: 24, live: "5a3573c3"},
+  %{room: "23 m²", type: "TemperatureSensor", unit: "Kelvin", hist: 37, live: "b0bc97af"},
+  %{room: "23 m²", type: "HumiditySensor", unit: "Percentage", hist: 22, live: "06ef2490"},
+  %{room: "23 m²", type: "PIR", unit: "Unitless", hist: 28, live: "92d17015"}
+]
+```
+
+```elixir
+sensors
+|> Enum.map(fn sensor ->
+  modality = Map.get(type2modality, sensor.type)
+
+  query = """
+    MATCH
+      (t:Type {name: '#{sensor.type}'}),
+      (u:Type {name: '#{sensor.unit}'}),
+      (d:Type {name: 'Data'}),
+      (m:Type {name: '#{modality}'}),
+      (r:Room {area: '#{sensor.room}'})
+    CREATE (tmp:#{sensor.type})-[:type]->(t)
+    CREATE (tmp)-[:unit]->(u)
+    CREATE (tmp)-[:data]->(:Data {hist: '#{sensor.hist}', live: '#{sensor.live}'})-[:type]->(d)
+    CREATE (tmp)-[:provides]->(modality:#{modality})-[:type]->(m)
+    CREATE (r)-[:modality]->(modality)
+  """
+
+  Bolt.Sips.query!(conn, query)
+end)
+```
+
+## Queries
+
+Room sizes:
+
+```elixir
+Bolt.Sips.query!(conn, "MATCH (room:Room) RETURN room.area AS area")
+|> result_as_table.()
+```
+
+Per-floor combinations of temperature and relative humidity data:
+
+```elixir
+q = """
+MATCH
+    (r)<-[:contains]-(f),
+    (r)-[:type]->(:Type {name: 'Room'}),
+    (f)-[:type]->(:Type {name: 'Floor'}),
+    (r)-[:modality]->(rhum_modality)<-[:provides]-(hum),
+    (rhum_modality)-[:type]->(:Type {name: 'RelativeHumidity'}),
+    (r)-[:modality]->(temp_modality)<-[:provides]-(temp),
+    (temp_modality)-[:type]->(:Type {name: 'Temperature'})
+RETURN
+    f.name AS floor, hum, temp
+"""
+
+response =
+  Bolt.Sips.query!(conn, q)
+  |> result_as_table.()
+```
+
+### Type Tree
+
+```elixir
+response =
+  Bolt.Sips.query!(conn, "MATCH (t:Type)-[:subtypeof]->(parent:Type) RETURN t.name, parent.name")
+
+response.results
+|> Enum.map(fn %{"t.name" => name, "parent.name" => parent} -> {name, parent} end)
+|> result_as_tree.()
+```
+
+## Final Words
+
+The driver used here, [bolt_sips](https://github.com/florinpatrascu/bolt_sips), has some noteworthy shortcomings. Notable examples:
+
+* The inability to connect to multiple Neo4J instances.
+* The lack of support for Neo4j version 5+.
+
+These seem to be remedied by the [boltx](https://github.com/sagastume/boltx) driver (which is still under construction).
