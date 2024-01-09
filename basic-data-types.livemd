@@ -1,0 +1,643 @@
+# Basic Data Types
+
+## Introduction
+
+This is an introduction to the basic data types of Elixir. This is intertwined with other topics like:
+
+* Pattern matching
+* [Protocols](protocols.livemd)
+* The actor model
+
+Once created, a value is immutable. Variables can be rebound (e.g., using the assignment operator), but such an operation does not affect existing values.
+
+In elixir, every syntactic construct evaluates to a value, and that value has a type. Values of any type are collectively referred to as terms.
+
+## Numbers
+
+### Integers
+
+Integers in elixir are of arbitrary size and can thus fully represent any integer from $\mathbb{Z}$.
+
+```elixir
+42
+```
+
+```elixir
+1_000_000
+```
+
+Dividing an integer by another integer yields a float:
+
+```elixir
+12 / 10
+```
+
+Integer division and modulo:
+
+```elixir
+{
+  div(12, 10),
+  rem(12, 10)
+}
+```
+
+### Floats
+
+Floats are represented as a fraction of integers and can thus fully represent any rational number (that is, any member of $\mathbb{Q}$).
+
+```elixir
+1.2
+```
+
+Floats can be converted to integers in different ways:
+
+```elixir
+{
+  trunc(1.6),
+  round(1.6)
+}
+```
+
+**Note:** A consequence is this (and other design features) is that numerical performance is going to suck. There are ways around this, including:
+
+1. The [Nx](https://hexdocs.pm/nx/Nx.html) module, which is much like a combination of [numpy](https://numpy.org) and a few others.
+2. Through [NIFs](https://www.erlang.org/doc/tutorial/nif.html), there is good integration with Rust code (see [rustler](https://docs.rs/rustler/latest/rustler/)), and Zig code (see [zigler](https://hexdocs.pm/zigler/Zig.html)).
+3. Rust code (throught the [erl_dist](https://github.com/sile/erl_dist) crate) can act as a node in a BEAM cluster by implementing the [Erlang distribution protocol](https://www.erlang.org/doc/apps/erts/erl_dist_protocol).
+4. Integration with [Futhark](https://futhark-lang.org) (see [futlixir](https://github.com/Munksgaard/futlixir)) for running code on CUDA/OpenCL-capable GPUs (or CPUs).
+
+## Booleans
+
+Booleans are all lower-case:
+
+```elixir
+{
+  true,
+  false
+}
+```
+
+Logical operators are spelled out in plain english:
+
+| Operator    | Syntax  |
+| ----------- | ------- |
+| Logical not | not A   |
+| Logical and | A and B |
+| Logical or  | A or B  |
+
+Examples:
+
+```elixir
+{
+  not true,
+  true and false,
+  true or false
+}
+```
+
+## Strings
+
+Strings are UTF-8 encoded, and are defined using double quotes:
+
+```elixir
+"Hello, World"
+```
+
+There is special syntax for convenient multiline strings:
+
+```elixir
+"""
+Hello,
+World
+"""
+```
+
+Both formats support substitution:
+
+```elixir
+r = 1.2
+"The area of a circle with a radius of #{r} is #{:math.pi() * r * r}!"
+```
+
+Length of a string:
+
+```elixir
+String.length("Hello, World")
+```
+
+Concatenation:
+
+```elixir
+"Hello, " <> "World"
+```
+
+Testing whether a term is a string:
+
+```elixir
+{
+  is_binary("Hello, World"),
+  is_binary(42)
+}
+```
+
+**Note:** Some code (notably Erlang) works with [charlists](https://hexdocs.pm/elixir/binaries-strings-and-charlists.html#charlists) rather than strings. We will skip them for now.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Further reading:
+
+* Regular expressions with the [Regex](https://hexdocs.pm/elixir/Regex.html) module. Especially the [named_captures](https://hexdocs.pm/elixir/Regex.html#named_captures/3) function is nice.
+  * Exercism: [Regular Expressions](https://exercism.org/tracks/elixir/concepts/regular-expressions)
+  * Medium: [Learning Regex with Elixir](https://medium.com/@SomeDude_Drew/learning-regex-with-elixir-d65488621076)
+* The [nimble_parsec](https://github.com/dashbitco/nimble_parsec) module for writing flexible parsers.
+
+## Atoms
+
+Atoms are constants with values that match their own name. They have much the same function as an `enum`, and they are declared starting with a colon:
+
+```elixir
+{
+  :ok,
+  :"Once in a generation ..."
+}
+```
+
+An atom can be converted to a string:
+
+```elixir
+Atom.to_string(:ok)
+```
+
+A string can be converted to an atom:
+
+```elixir
+String.to_atom("ok")
+```
+
+**Note:** Atoms are not garbage collected, so the number of atoms can only grow and remain steady over time. When dynamically generating atoms, you should ensure that the set of potential generated atoms is bounded. Otherwise you have a leak, and an attack vector.
+
+## Functions
+
+### Anonymous Functions
+
+<!-- livebook:{"break_markdown":true} -->
+
+An anonymous function is a function without a name. It is simply a term that can be assigned to a (named) variable and/or executed.
+
+Anonymous functions are declared using the `fn` keyword, and arrow (`->`) to signify the translation from inputs to outputs and the `end` keyword.
+
+```elixir
+fn arg -> arg end
+```
+
+Lets give it a name, and try to call it:
+
+```elixir
+fun = fn arg -> arg end
+fun.(42)
+```
+
+Anonymous functions don't have to take any argument:
+
+```elixir
+the_answer = fn -> 42 end
+the_answer.()
+```
+
+But they can also take multiple arguments:
+
+```elixir
+add = fn a, b -> a + b end
+add.(42, 58)
+```
+
+Pattern matching is supported:
+
+```elixir
+combine = fn
+  a, b when is_integer(a) and is_integer(b) ->
+    a + b
+
+  a, b when is_binary(a) and is_binary(b) ->
+    a <> " " <> b
+end
+
+{
+  combine.(1, 2),
+  combine.("a", "b")
+}
+```
+
+### Functions in Modules
+
+<!-- livebook:{"break_markdown":true} -->
+
+While anonymous functions are convenient for inlining smaller peices of logic (e.g., for higher-order functions), it is often desirable to group and name them for composition.
+
+In Elixir, functionality is grouped in modules. Modules are essentially collections of (named) functions. There is a bit more to it, but let's leave it for now.
+
+Lets say that we want to make a module for dealing with parabolic functions. These are the ones on the format: $f(x) = ax^2+bx+c$. Such functions have roots at $x=\frac{-b \pm \sqrt{b^2-4ac}}{2a}$. Here, the discriminant $b^2-4ac$ determines the number of roots. Our module could look like this:
+
+```elixir
+defmodule ParabolicFunction do
+  def roots(a, b, c) do
+    case calc_discriminant(a, b, c) do
+      d when d < 0 ->
+        []
+
+      d when d == 0 ->
+        [calc_roots(a, b, 0)]
+
+      d ->
+        sqrtd = :math.sqrt(d)
+
+        [
+          calc_roots(a, b, sqrtd),
+          calc_roots(a, b, -sqrtd)
+        ]
+    end
+  end
+
+  defp calc_discriminant(a, b, c) do
+    b * b - 4 * a * c
+  end
+
+  defp calc_roots(a, b, extra) do
+    (extra - b) / (2 * a)
+  end
+end
+```
+
+Inside a module, `def` is used to define public methods and `defp` is used to define private ones.
+
+Lets test it:
+
+```elixir
+{
+  ParabolicFunction.roots(1, 0, -1),
+  ParabolicFunction.roots(1, 0, 0),
+  ParabolicFunction.roots(1, 0, 1)
+}
+```
+
+Oh, and module functions also supports pattern matching.
+
+<!-- livebook:{"break_markdown":true} -->
+
+**Note:** While this looks fairly underwhelming, this can be applied in much more interesting ways once we start building *GenServers*. But more on that later ...
+
+<!-- livebook:{"break_markdown":true} -->
+
+### Function Conventions
+
+Elixir has a few conventions for naming functions.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Functions whose name ends in a question mark return a boolean:
+
+```elixir
+String.contains?("Once upon a time ...", "time")
+```
+
+Some functions come in two flavors; one with an exclamation mark at the end of the name, and one without. The one with the exclamation mark will either succeed and return the appropriate value, or error out. The other will return an `{:ok, value}` tuple in case of success and something else in case of a problem. This is designed with pattern matching in mind.
+
+```elixir
+m = %{"a" => 1, "b" => 2, "c" => 3}
+```
+
+```elixir
+Map.fetch(m, "a")
+```
+
+```elixir
+{:ok, value} = Map.fetch(m, "a")
+value
+```
+
+```elixir
+Map.fetch(m, "d")
+```
+
+```elixir
+Map.fetch!(m, "a")
+```
+
+```elixir
+Map.fetch!(m, "d")
+```
+
+## Tuples
+
+You have already seen a number of tuples in the above material. Visually they are a pair of curly braces surrounding a comma-separated list of terms. Behind the scenes, it is a collection of a fixed number of contiguous terms that is ordered and indexable. Any entry can have any type.
+
+Tuples are typically used to treat multiple terms as one.
+
+A few examples:
+
+```elixir
+origo = {0, 0}
+```
+
+```elixir
+sqrt = fn
+  value when value >= 0 -> {:ok, :math.sqrt(value)}
+  _ -> {:error, "Argument must be non-negative"}
+end
+
+{
+  sqrt.(-1),
+  sqrt.(0),
+  sqrt.(1)
+}
+```
+
+One can index a tuple:
+
+```elixir
+elem({0, 1, 2, 3, 4, 5}, 3)
+```
+
+However, they really shine when pattern matching (more on why this is amazing later):
+
+```elixir
+{:ok, value} = sqrt.(42)
+value
+```
+
+A tuple can be converted to a list:
+
+```elixir
+Tuple.to_list({1, 2, 3})
+```
+
+## Lists
+
+One of the most important data structures in elixir is the linked list. A linked list is essentially a chained datastructure, where each link contains a payload and a pointer to the next link. The chain ends with a null pointer. Expressed as nested tuples, a list containing the elements 1, 2 and 3 would look like this:
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+{1, {2, {3, nil}}}
+```
+
+This list can be written as:
+
+```elixir
+l = [1, 2, 3]
+```
+
+Each link has two components:
+
+1. The head holding the payload of the link. This can be accessed through the `hd` function.
+2. The tail referencing the next link (and thus the rest of the chain). This can be accessed through the `tl` function.
+
+Lets see them in use:
+
+```elixir
+{
+  hd(l),
+  tl(l)
+}
+```
+
+However, it is usually preferable to pattern match:
+
+```elixir
+[h | t] = l
+
+{
+  h,
+  t
+}
+```
+
+The length of a list can be found (by traversing it):
+
+```elixir
+length(l)
+```
+
+Lists can be indexed. For this, we use the [Enum](https://hexdocs.pm/elixir/1.15.4/Enum.html) module (that works on any data type that implements the `Enumerable` protocol):
+
+```elixir
+{
+  Enum.at(l, 1),
+  Enum.at(l, 17),
+  Enum.at(l, 17, :not_found)
+}
+```
+
+Lists can be concatenated:
+
+```elixir
+l ++ [4, 5, 6]
+```
+
+### Higher-Order Funtions
+
+Higher-order functions are functions that take functions as parameters and/or return functions. That is, they use functions as data. This is a way of composing functionality, and it is especially relevant when working with lists.
+
+<!-- livebook:{"break_markdown":true} -->
+
+The simplest form is to [map](https://hexdocs.pm/elixir/1.15.4/Enum.html#map/2) the values of a list according to some function:
+
+```elixir
+incr = fn i -> i + 1 end
+Enum.map(l, incr)
+```
+
+The list can also be [filtered](https://hexdocs.pm/elixir/1.15.4/Enum.html#filter/2) according to some condition expressed through a function:
+
+```elixir
+larger_than_one = fn i -> i > 1 end
+Enum.filter(l, larger_than_one)
+```
+
+There are too many higher-order functions to mention here, and even more can be written. But we are going to go through one more: By [folding](https://hexdocs.pm/elixir/1.15.4/List.html#foldl/3) a list we can recursively apply a function to all elements and an accumulator value:
+
+```elixir
+initial_acc = 0
+sum = fn element, acc -> element + acc end
+List.foldl(l, initial_acc, sum)
+```
+
+### Keyword Lists
+
+A keyword list is a list that (i) consists only of two-element tuples, and (ii) has an atom as the first element of each of these tuples. The first element of these tuples are known as the *key* (meaning that keys have to be atoms), and the second is known as the value (and that can be any term). Because a keyword list is a list, any list operation can be applied to a keyword list.
+
+However, due to their nature, keyword lists also have a few things in common with maps. The value associated with a key can be looked up by searching through the elements of the list. The first occurrence of a key takes precedence.
+
+You will often see a keyword list used as the last parameter to a function as a way of passing a wide variety of options while keeping the interface static.
+
+<!-- livebook:{"break_markdown":true} -->
+
+We can define a keyword list as such:
+
+```elixir
+kl = [timeout: 1200, retry: true, retry_count: 5]
+```
+
+This is equivalent to:
+
+```elixir
+[{:timeout, 1200}, {:retry, true}, {:retry_count, 5}]
+```
+
+When calling a function that takes a keyword list as the last parameter, the square brackets are optional:
+
+```elixir
+fun = fn a, b, opts -> {a, b, opts} end
+
+{
+  fun.(1, 2, kl),
+  fun.(1, 2, timeout: 1200, retry: true, retry_count: 5)
+}
+```
+
+The [Keyword](https://hexdocs.pm/elixir/1.12/Keyword.html) module has a number of conveninent functions for manipulating kelyword lists.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Keyword lists can be pattern matched.
+
+## Maps
+
+A map in Elixir represents a *mapping* from any term with any other term.
+
+<!-- livebook:{"break_markdown":true} -->
+
+A map with an initial mapping can be declared as such:
+
+```elixir
+m = %{"a" => 1, "b" => 2, "c" => 3}
+```
+
+While any term can be used as key, a shorthand is available for when all keys are atoms:
+
+```elixir
+m2 = %{a: 1, b: 2, c: 3}
+```
+
+One can look up the value associated with a key:
+
+```elixir
+{
+  Map.get(m, "a"),
+  Map.get(m, "d"),
+  Map.get(m, "d", :hell_no)
+}
+```
+
+If the key is an atom, you can use the shorthand:
+
+```elixir
+m2.c
+```
+
+Due to the immutability of data, performing an update to a map results in a new map:
+
+```elixir
+m3 = Map.put(m, "d", 4)
+
+{
+  m,
+  m3
+}
+```
+
+Maps can also be merged:
+
+```elixir
+Map.merge(%{a: 1, b: 2, c: 3}, %{b: 12, c: 13, d: 14})
+```
+
+The [Map](https://hexdocs.pm/elixir/1.15.4/Map.html) module has a lot of convenient functions of very high expressivenes. If you want to do something with a map that you think others may have wanted to do as well, chances are that there is a function for it. For instance, the [get_and_update](https://hexdocs.pm/elixir/1.15.4/Map.html#get_and_update/3) fetches the value associated with a key and updates the value in the map, all in one atomic operation.
+
+<!-- livebook:{"break_markdown":true} -->
+
+A keyword list can be converted to a map:
+
+```elixir
+Map.new(kl)
+```
+
+## Process IDs (pids)
+
+The BEAM virtual machine -- that executes Elixir code -- by default starts one scheduler per hardware thread available. Many of the notions and concepts relevant to the BEAM are named after operating system equivalents. In Elixir, concurrency is achieved by starting *processes*, and each process has an id. This id is process id is known as a `pid`. All processes come with a mailbox through which they can be communicated. That mailbox can be addressed through the pid of the process.
+
+All Elixir code is executed within a process. We can get the pid of the current process:
+
+```elixir
+self()
+```
+
+A process id can be converted to a string:
+
+```elixir
+"#{inspect(self())}"
+```
+
+Check whether a term is a pid:
+
+```elixir
+[
+  self(),
+  "#PID<0.145.0>",
+  42
+]
+|> Enum.map(fn term -> is_pid(term) end)
+```
+
+What is known about a pid?
+
+```elixir
+Process.info(self())
+```
+
+That is quite a bit. Look up the documentation for the function and you will see that it is possible to list specifically which fields you are interested in.
+
+<!-- livebook:{"break_markdown":true} -->
+
+To start a process, you need a function. This one waits for a message to arrive, then it performs a (trivial) pattern match and prints out its pid and the message it received:
+
+```elixir
+receiver =
+  fn ->
+    receive do
+      message ->
+        IO.puts("[#{inspect(self())}] I received #{message}")
+    end
+  end
+```
+
+Starting is simple:
+
+```elixir
+pid = spawn(receiver)
+```
+
+It can be communicated:
+
+```elixir
+send(pid, 42)
+```
+
+That process has now fulfilled its single purpose, and should have exited by now.
+
+Let's verify that it is dead:
+
+```elixir
+Process.alive?(pid)
+```
+
+A process can be killed:
+
+```elixir
+pid = spawn(receiver)
+```
+
+```elixir
+Process.exit(pid, :kill)
+```
+
+**Note:** A process is a fundamental abstraction. The *generic server* (aka `GenServer`) abstraction was build on top of it. This abstraction adds a look over incoming messages with state, and a standardized interface. GenServers are the main building block of Elixir applications.
