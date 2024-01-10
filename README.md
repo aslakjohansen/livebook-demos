@@ -7,10 +7,10 @@ A collection of [LiveBook](https://livebook.dev) demos.
 - [Protocols](protocols.livemd)
 
 Modules:
-- [JSON](json.livemd) with Jason
-- [MQTT](mqtt.livemd) with Tortoise
-- [Neo4j](neo4j.livemd) with bolt_sips
-- [RDF](rdf.livemd)
+- [JSON](json.livemd) with the jason module.
+- [MQTT](mqtt.livemd) with the tortoise module.
+- [Neo4j](neo4j.livemd) with the bolt_sips module.
+- [RDF](rdf.livemd) with the rdf and sparql modules.
 
 Well-known problems:
 - [Dining Philosophers](dining-philosopers.livemd)
