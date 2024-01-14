@@ -1,0 +1,304 @@
+# Control Structures
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.2"},
+  {:vega_lite, "~> 0.1.6"},
+  {:kino_vega_lite, "~> 0.1.10"}
+])
+```
+
+## Introduction
+
+```elixir
+alias VegaLite, as: Vl
+```
+
+## If and Else
+
+An if construction evaluates to a value. If the else path is omitted it will evaluate til `nil`:
+
+```elixir
+fun_if = fn c ->
+  if c do
+    1
+  end
+end
+
+{
+  fun_if.(true),
+  fun_if.(false)
+}
+```
+
+But it can also be included, like this:
+
+```elixir
+fun_ifelse = fn c ->
+  if c do
+    1
+  else
+    2
+  end
+end
+
+{
+  fun_ifelse.(true),
+  fun_ifelse.(false)
+}
+```
+
+## Cond
+
+`if` constructions are often chained. While they can be nested, it is nicer to use a `cond` construction. In such a construction, a number of expressions are evaluated in order until one of them evaluates to true, and then the corresponding entry is the result of the `cond` construction.
+
+```elixir
+a = 1
+b = 2
+c = 3
+
+cond do
+  a == 2 -> :first
+  b < a -> :second
+  false -> :third
+  a + b == c -> :fourth
+  true -> :fifth
+end
+```
+
+## Case
+
+A case construct evaluates to the result of the branch associated with the first matching pattern. Underscore is a pattern that matches anything.
+
+Example:
+
+```elixir
+color = fn input ->
+  case input do
+    "red" -> {1, 0, 0}
+    "green" -> {0, 1, 0}
+    "blue" -> {0, 0, 1}
+    value when is_float(value) -> {value, value, value}
+    _ -> {1, 1, 1}
+  end
+end
+
+{
+  color.("red"),
+  color.("blue"),
+  color.(42),
+  color.(0.3),
+  color.(self())
+}
+```
+
+## Larger Example
+
+Some average heights from [Wikipedia](https://en.wikipedia.org/wiki/Average_human_height_by_country):
+
+```elixir
+heights = %{
+  {"Denmark", :male} => 180.4,
+  {"Denmark", :female} => 167.2,
+  {"Greece", :male} => 177,
+  {"Greece", :female} => 165,
+  {"Finland", :male} => 178.9,
+  {"Finland", :female} => 165.3,
+  {"New Zealand", :male} => 177,
+  {"New Zealand", :female} => 164,
+  {"Netherlands", :male} => 183.8,
+  {"Netherlands", :female} => 170.7,
+  {"North Korea", :male} => 165.6,
+  {"North Korea", :female} => 154.9,
+  {"Poland", :male} => 172.2,
+  {"Poland", :female} => 159.4,
+  {"United States", :male} => 175.3,
+  {"United States", :female} => 161.3,
+  {"Jamaica", :male} => 171.8,
+  {"Jamaica", :female} => 160.8,
+  {"Austria", :male} => 178.5,
+  {"Austria", :female} => 166.9,
+  {"Uruguay", :male} => 170,
+  {"Uruguay", :female} => 158,
+  {"Kenya", :male} => 169.6,
+  {"Kenya", :female} => 158.2,
+  {"England", :male} => 175.3,
+  {"England", :female} => 161.9
+}
+```
+
+```elixir
+data =
+  heights
+  |> Map.keys()
+  |> Enum.map(fn {country, _sex} -> country end)
+  |> Enum.uniq()
+  |> Enum.map(fn country ->
+    %{
+      country: country,
+      male: Map.get(heights, {country, :male}),
+      female: Map.get(heights, {country, :female})
+    }
+  end)
+
+Vl.new(width: 400, height: 300)
+|> Vl.data_from_values(data)
+|> Vl.mark(:point)
+|> Vl.encode_field(:x, "male", type: :quantitative, title: "Male / [cm]", scale: [zero: false])
+|> Vl.encode_field(:y, "female",
+  type: :quantitative,
+  title: "Female / [cm]",
+  scale: [zero: false]
+)
+|> Vl.encode_field(:tooltip, "country", type: :nominal)
+```
+
+A selection of data from various people:
+
+```elixir
+people = [
+  %{name: "Usain Bolt", sex: :male, height: 195, born: 1986, country: "Jamaica"},
+  %{name: "Hedy Lamarr", sex: :female, height: 170, born: 1914, country: "Austria"},
+  %{name: "Bob Marley", sex: :male, height: 170, born: 1945, country: "Jamaica"},
+  %{name: "Erwin Schrödinger", sex: :male, height: 188, born: 1887, country: "Austria"},
+  %{name: "Tuomas Holopainen", sex: :male, height: 188, born: 1976, country: "Finland"},
+  %{name: "Linus Torvalds", sex: :male, height: 177, born: 1969, country: "Finland"},
+  %{name: "Idris Elba", sex: :male, height: 189, born: 1972, country: "England"},
+  %{name: "Keira Knightley", sex: :female, height: 170, born: 1985, country: "England"},
+  %{name: "Tilda Swinton", sex: :female, height: 180, born: 1960, country: "England"},
+  %{name: "Kim Jong-un", sex: :male, height: 172, born: 1982, country: "North Korea"},
+  %{name: "H C Andersen", sex: :male, height: 185, born: 1805, country: "Denmark"},
+  %{name: "Aristotle", sex: :male, height: 172, born: -384, country: "Greece"},
+  %{name: "Jacinda Ardern", sex: :female, height: 168, born: 1980, country: "New Zealand"}
+]
+```
+
+Pick any two:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+names =
+  people
+  |> Enum.map(fn person -> {person.name, person.name} end)
+  |> Enum.sort()
+
+Kino.Input.select("First person", names)
+kino_name1 = Kino.Input.select("First person:", names)
+kino_name2 = Kino.Input.select("Second person:", names)
+Kino.Layout.grid([kino_name1, kino_name2])
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+persons =
+  [Kino.Input.read(kino_name1), Kino.Input.read(kino_name2)]
+  |> Enum.map(fn name ->
+    Enum.find(people, fn person -> person.name == name end)
+  end)
+```
+
+Decide on visual properties:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+circles =
+  persons
+  |> Enum.map(fn person ->
+    stroke =
+      if person.sex == :female do
+        "pink"
+      else
+        "rgb(127,127,255)"
+      end
+
+    case {person, Map.get(heights, {person.country, person.sex})} do
+      {%{height: h}, avg} when h < avg -> {stroke, "red", h}
+      {%{height: h}, _avg} -> {stroke, "blue", h}
+      _ -> {stroke, "black", 130}
+    end
+  end)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{_color, _width} =
+  edge =
+  case {persons, circles} do
+    {[person, person], _} ->
+      {"rgb(0,127,0)", 8}
+
+    {[%{sex: sex}, %{sex: sex}], [{_, _, h1}, {_, _, h2}]} ->
+      {if sex == :male do
+         "blue"
+       else
+         "pink"
+       end, abs(h1 - h2)}
+
+    {[%{}, %{}], [{_, fill, h1}, {_, fill, h2}]} ->
+      {fill, abs(h1 - h2)}
+
+    _ ->
+      {"red", 5}
+  end
+```
+
+Illustrate:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule Illustrate do
+  @height 600
+  @width 800
+  @sw 4
+
+  defp produce_edge_code({x1, y1}, {x2, y2}, {color, width} = _edge) do
+    """
+    <line x1=\"#{x1}\"
+          y1=\"#{y1}\"
+          x2=\"#{x2}\"
+          y2=\"#{y2}\"
+          stroke=\"#{color}\"
+          stroke-width=\"#{width}\" />
+    """
+  end
+
+  defp produce_person_code({x, y}, {stroke, fill, radius} = _person) do
+    """
+    <circle cx=\"#{x}\"
+            cy=\"#{y}\"
+            r=\"#{2 * (radius - 150)}\"
+            fill=\"#{fill}\"
+            stroke=\"#{stroke}\"
+            stroke-width=\"#{@sw}\" />
+    """
+  end
+
+  def render(person_left, edge, person_right) do
+    p_left = {1 * @width / 3, @height / 2}
+    p_right = {2 * @width / 3, @height / 2}
+    edge_code = produce_edge_code(p_left, p_right, edge)
+    person_left_code = produce_person_code(p_left, person_left)
+    person_right_code = produce_person_code(p_right, person_right)
+
+    """
+    <svg viewBox="0 0 #{@width} #{@height}" xmlns="http://www.w3.org/2000/svg">
+      #{edge_code}
+      #{person_left_code}
+      #{person_right_code}
+    </svg>
+    """
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Illustrate.render(Enum.at(circles, 0), edge, Enum.at(circles, 1))
+|> Kino.Image.new(:svg)
+```
