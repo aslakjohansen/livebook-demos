@@ -5,6 +5,7 @@ A collection of [LiveBook](https://livebook.dev) demos.
 ([Elixir](https://elixir-lang.org)) language features:
 - [Basic data types](basic-data-types.livemd)
 - [Control structures](control-structures.livemd)
+- [Pattern matching](pattern-matching.livemd)
 - [Protocols](protocols.livemd)
 
 Modules:

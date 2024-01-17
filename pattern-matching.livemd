@@ -1,0 +1,346 @@
+# Pattern Matching
+
+## Introduction
+
+The `=` operator is used for pattern maching:
+
+```elixir
+v = 42
+```
+
+This *binds* the variables on the left-hand side to elements of the structure of the right-hand side. After this, the variable `v` can be referenced:
+
+```elixir
+IO.puts(v)
+```
+
+Underscore will match anything (but not bind a name to it):
+
+```elixir
+_ = 42
+```
+
+Binding values is only part of the purpose of pattern matching. It is also used to verify structure (this is also the case for tuples, lists, maps ...):
+
+```elixir
+42 = 42
+```
+
+A particular match is either successful (and all bindings are established) or it fails:
+
+```elixir
+42 = 56
+```
+
+Sometimes, however, it can be convenient to match and *not* bind. For that we use the pin operator `^`:
+
+```elixir
+a = 2
+{a, ^a} = {1, 2}
+```
+
+## Matching Tuples
+
+Variables names can be bound to the individual elements of a tuple:
+
+```elixir
+{x, y} = {1, 2}
+```
+
+Since no name is being bound by underscores, each underscore can match something different:
+
+```elixir
+{_, _} = {1, 2}
+```
+
+The number of elements has to be matched:
+
+```elixir
+{x, y} = {1, 2, 3}
+```
+
+If you don't care about the last element you can either match it with an underscore or bind a variable that i prefixed by an underscore to it:
+
+```elixir
+{x, y, _z} = {1, 2, 3}
+```
+
+## Matching Lists
+
+A lists head and tail can be pattern matched:
+
+```elixir
+[a | b] = [1, 2, 3, 4]
+{a, b}
+```
+
+Patterns can (in general) be nested:
+
+```elixir
+[a | [b | c]] = [1, 2, 3, 4]
+{a, b, c}
+```
+
+### Keyword Lists
+
+<!-- livebook:{"break_markdown":true} -->
+
+Since keyword lists are lists, the same rules apply:
+
+```elixir
+[a | b] = [a: 1, b: 2, c: 3, d: 4]
+{a, b}
+```
+
+This, however, is counter to how we normally think of keyword lists and this not very useful.
+
+Instead, we have specific syntax for matching keyword lists:
+
+```elixir
+[r: r, g: g, b: b] = [r: 127, g: 255, b: 0]
+{r, g, b}
+```
+
+This does, however, require you to specify all keys in correct order, and is thus rarely used.
+
+## Matching Maps
+
+Matching of any type of keys:
+
+```elixir
+%{"r" => r, "g" => g, "b" => b} = %{"r" => 127, "g" => 255, "b" => 0}
+{r, g, b}
+```
+
+Shorthand for when keys are atoms:
+
+```elixir
+%{r: r, g: g, b: b} = %{r: 127, g: 255, b: 0}
+{r, g, b}
+```
+
+Any subset can be matched:
+
+```elixir
+%{g: g} = %{r: 127, g: 255, b: 0}
+g
+```
+
+Note that the result of a pattern match is the right-hand side:
+
+```elixir
+%{g: g} = %{r: 127, g: 255, b: 0}
+```
+
+So we could perform two pattern matches:
+
+```elixir
+%{b: b} = %{g: g} = %{r: 127, g: 255, b: 0}
+{b, g}
+```
+
+This is the case for any pattern match, and that becomes especially interesting when dealing with function parameters. See [Function Declarations](#function-declarations) for details.
+
+## Matching Strings
+
+While pattern matching on strings (or *binaries*) is both possible and extremely convening when implementing network protocols, it is a bit more tricky. For now, we will skip it.
+
+## Matching Nested Structures
+
+Patterns may be combined:
+
+```elixir
+book = %{
+  authors: [
+    %{first: "Donald", last: "Knuth", born: 1938}
+  ],
+  title: "Art of Computer Programming, Volume 1: Fundamental Algorithms",
+  isbn: "9780201896831",
+  pagecount: 672
+}
+
+%{authors: [%{last: lastname} | _], title: title} = book
+"#{lastname}: #{title}"
+```
+
+## Function Declarations
+
+### Anonymous Functions
+
+<!-- livebook:{"break_markdown":true} -->
+
+An anonymous function essentially has a built-in case construction that can take any number of patterns. First match stops the search:
+
+```elixir
+luminance = fn
+  %{r: r, g: g, b: b} -> 0.2126 * r + 0.7152 * g + 0.0722 * b
+  g = _greyness -> g
+end
+
+{
+  luminance.(%{r: 127, g: 255, b: 0}),
+  luminance.(137)
+}
+```
+
+### Module Functions
+
+<!-- livebook:{"break_markdown":true} -->
+
+In modules, you simply declare one function per pattern. Again, they are search in order until a match is found:
+
+```elixir
+defmodule Color do
+  def luminance(%{r: r, g: g, b: b}) do
+    0.2126 * r + 0.7152 * g + 0.0722 * b
+  end
+
+  def luminance(greyness) do
+    greyness
+  end
+end
+
+{
+  Color.luminance(%{r: 127, g: 255, b: 0}),
+  Color.luminance(137)
+}
+```
+
+## Guards
+
+Patterns used outside of simple the match operator may be *guarded*. A guard is a codition over one or more of the bound variables that must hold for the match to succeed.
+
+<!-- livebook:{"break_markdown":true} -->
+
+For instance:
+
+```elixir
+data = [
+  {1, 2},
+  {2, 2},
+  {2, 1}
+]
+
+data
+|> Enum.map(fn datum ->
+  case datum do
+    {a, b} when a > b -> "a is greater than b"
+    {a, b} when a < b -> "a is less than b"
+    {_a, _b} -> "a and b are equal"
+  end
+end)
+```
+
+One can also check the types:
+
+```elixir
+data = [
+  true,
+  :ok,
+  1,
+  1.2,
+  "The got the mustard out!",
+  {1, 2},
+  [1, 2],
+  %{a: 1, b: 2},
+  self(),
+  nil
+]
+
+data
+|> Enum.map(fn datum ->
+  case datum do
+    t when is_boolean(t) -> "boolean"
+    t when is_atom(t) -> "atom"
+    t when is_integer(t) -> "integer"
+    t when is_float(t) -> "float"
+    t when is_binary(t) -> "binary"
+    t when is_tuple(t) -> "tuple"
+    t when is_list(t) -> "list"
+    t when is_map(t) -> "map"
+    t when is_pid(t) -> "pid"
+    t when is_nil(t) -> "nil"
+    _ -> "something else"
+  end
+end)
+```
+
+**Note:** As booleans are atoms as well the order of the two first guards determine how `true` and `false` are categorized.
+
+<!-- livebook:{"break_markdown":true} -->
+
+### In Anonymous Functions
+
+<!-- livebook:{"break_markdown":true} -->
+
+Guards can be used in anonymous functions:
+
+```elixir
+stringify = fn
+  v when is_integer(v) -> "#{v}.0"
+  v when is_float(v) -> "#{v}"
+end
+```
+
+```elixir
+{
+  stringify.(42),
+  stringify.(3.14)
+}
+```
+
+**Note:** This function is not defined for parameters of other types than integers and floats:
+
+```elixir
+stringify.(true)
+```
+
+### In Module Functions
+
+<!-- livebook:{"break_markdown":true} -->
+
+Guards for module functions look like this:
+
+```elixir
+defmodule Stringify do
+  def process(v) when is_integer(v) do
+    "#{v}.0"
+  end
+
+  def process(v) when is_float(v) do
+    "#{v}"
+  end
+end
+```
+
+```elixir
+{
+  Stringify.process(42),
+  Stringify.process(3.14)
+}
+```
+
+### Complex Guards
+
+<!-- livebook:{"break_markdown":true} -->
+
+Guards are expressions (of limited expressability though) that supports logical `and`, `or` and `not` operations:
+
+```elixir
+combine = fn
+  a, b when is_integer(a) and is_integer(b) ->
+    a + b
+
+  a, b when is_binary(a) and is_binary(b) ->
+    a <> b
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{
+  combine.(1, 2),
+  combine.("1", "2")
+}
+```
