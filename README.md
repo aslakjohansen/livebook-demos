@@ -27,6 +27,6 @@ Tools:
 - [HTTP server supporting GET requests against root filesystem](http-server.livemd)
 
 Useful techniques:
-- [Filesystem](Filesystem.livemd)
+- [Filesystem](filesystem.livemd)
 - [Dynamic graphics (both vector and bitmapped)](dynamic-graphics.livemd)
 
