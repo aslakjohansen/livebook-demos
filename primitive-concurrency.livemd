@@ -1,0 +1,168 @@
+# Primitive Concurrency
+
+## Introduction
+
+Elixir implements the actor model for concurrency. Briefly, that means that code runs strictly sequenctially in processes, and communicate with each other by sending messages. Each process has an inbox from which it can read messages, and that inbox can be indetified through the *process id*.
+
+**Note:** This model is not restricted to a single physical machine. In fact, it is transparant to networks. So the code you write doesn't have to care about which physical node of the cluster is running the process you want to send a message to. The code is the same.
+
+## Sending and Receiving
+
+When sending a message we need to identify the receiver through a process id (aka a pid). The pid of the current process is obtained by calling [self/0](https://hexdocs.pm/elixir/1.15.4/Kernel.html#self/0). Lets start off by sending a message to ourselves:
+
+```elixir
+send(self(), "Hello, you are looking good today!")
+```
+
+We can receive a message from the current process inbox:
+
+```elixir
+receive do
+  message -> IO.puts(message)
+end
+```
+
+**Note:** Any term can be transmitted and pattern matching can be used to pick out the messages that you care about.
+
+<!-- livebook:{"break_markdown":true} -->
+
+As this is a trivial example, we can get away with simply transmitting a payload. However, when we get to more serious business, there will be a number of concurrent processes that send messages to this process, and then we need to be able to map those messages to a way of handling them.
+
+If, for instance, we have a pool of processes that each process a work package we might want to include the work package id in the message:
+
+```elixir
+send(self(), {12, "The answer is 42"})
+```
+
+```elixir
+receive do
+  {wp, result} -> IO.puts("[WP#{wp}] #{result}")
+end
+```
+
+## Spawning Processes
+
+You can spawn a process tht executes an anonymous function:
+
+```elixir
+spawn(fn -> IO.puts(42) end)
+```
+
+You can spawn a process that executes a module function:
+
+```elixir
+defmodule Test do
+  def print(value) do
+    IO.puts(value)
+  end
+end
+```
+
+```elixir
+spawn(Test, :print, [42])
+```
+
+They do, in fact, run concurrently:
+
+```elixir
+1..20
+|> Enum.map(fn value ->
+  spawn(fn ->
+    sleepyness = :rand.uniform(2000)
+    Process.sleep(sleepyness)
+    IO.puts("I am number #{value}, and I am #{sleepyness} sleepy!")
+  end)
+end)
+```
+
+## Forking and Joining
+
+We can use `spawn` and `receive` to implement a simple version of the fork-join pattern:
+
+```elixir
+work_package_count = 30_000_000
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+worklist = 1..work_package_count
+```
+
+Lets do some processing (this takes ~130s on my laptop):
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+receiver = self()
+
+worklist
+|> Enum.map(fn value ->
+  spawn(fn -> send(receiver, value * 2) end)
+end)
+```
+
+At this point we should have `work_package_count` messages in our inbox (or rather, they should be on their way). Lets check:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Process.info(self(), :message_queue_len)
+```
+
+Lets receive them and calculate the average (~170s on my laptop):
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+avg =
+  worklist
+  |> Enum.map(fn _ ->
+    receive do
+      value -> value
+    end
+  end)
+  |> List.foldl({0, 0}, fn elem, {sum, count} -> {sum + elem, count + 1} end)
+  |> (fn {sum, count} -> sum / count end).()
+```
+
+Where does that last one come from, you may ask? Well, the input numbers go from 1 to `work_package_count`. The average of these numbers is `work_package_count` plus one and then divided by two. However, the work package operation doubles each of the values, and thus the average as well:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+(work_package_count + 1) / 2 * 2
+```
+
+Again, we should probably key the messages with a work package number to add some elbow room for running cells twice or in different order. But this will work if you run the workbook from start to finish.
+
+<!-- livebook:{"break_markdown":true} -->
+
+**Note:** In this particular case the overhead of spawning a process and receiving the data is greater than simply processing the work package (a multiplication), but this could be a much heavier task. And the above code will utilize up to `work_package_count` hardware threads (if you have that available on to you on a single machine). Try implementing that using threads and see when it croaks.
+
+## When Things Go Wrong
+
+The Elixir concurrency primitives scale really well. But what happens when things go wrong and some code crashes? That particular process crashes. Perhaps, before it gets to send any message. In order to not wait forever we can add a timeout (in ms):
+
+```elixir
+outcome =
+  receive do
+    _ ->
+      IO.puts("Someone sent me a message :-(")
+      :ok
+  after
+    10000 ->
+      IO.puts("Giving up waiting for messages!")
+      :timeout
+  end
+```
+
+If you hover your mouse over the little green circle in the buttom right corner of the above code block you can see how long it too to execute. This should match the timeout quite well.
+
+## Conclusion
+
+But, there likely was a really important reason for us to spawn that process in the first place. If it dies, then maybe it should be restarted? We would like our code to be *fault tolerant*.
+
+Elixir has modules for doing that. The restarting is done by so-called supervisors, and their role is to *supervise* the execution of concurrent code. This, however, requires a certain amount of standardization of the processes under supervision. And for that purpose we will be looking a generic servers (aka modules that implement the [GenServer](https://hexdocs.pm/elixir/1.15.4/GenServer.html) behaviour).
+
+But that is a story for a different workbook.
