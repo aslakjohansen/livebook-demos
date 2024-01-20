@@ -6,6 +6,7 @@ A collection of [LiveBook](https://livebook.dev) demos.
 - [Basic data types](basic-data-types.livemd)
 - [Control structures](control-structures.livemd)
 - [Pattern matching](pattern-matching.livemd)
+- [Primitive concurrency](primitive-concurrency.livemd)
 - [Protocols](protocols.livemd)
 
 Modules:
