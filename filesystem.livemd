@@ -1,0 +1,101 @@
+# Filesystem
+
+## Introduction
+
+This introduction to working with the filesystem is grossly simplified. It does, however, cover enough to get started with most projects.
+
+## Exploring the Filesystem
+
+Our current working directory (in two different forms of error handling):
+
+```elixir
+{:ok, cwd} = File.cwd()
+
+{
+  cwd,
+  File.cwd!()
+}
+```
+
+What is in that directory?
+
+```elixir
+files =
+  [cwd, "*"]
+  |> Path.join()
+  |> Path.wildcard()
+```
+
+Which of these are directories?
+
+```elixir
+dirs =
+  files
+  |> Enum.filter(&File.dir?/1)
+```
+
+## Preliminaries
+
+First, lets come up with a filename that is highly unlikely to hurt anyone:
+
+```elixir
+filename = "30c39b99-b9a8-4789-91ad-6283e43d1433"
+```
+
+Lets verify that it does not exist:
+
+```elixir
+File.exists?(filename)
+```
+
+**Note:** Only continue if this returns `false`.
+
+## Writing to Files
+
+```elixir
+{:ok, writer} = File.open(filename, [:write])
+IO.write(writer, "Hello")
+File.close(writer)
+```
+
+## Appending to Files
+
+```elixir
+{:ok, appender} = File.open(filename, [:append])
+IO.write(appender, ", World")
+File.close(appender)
+```
+
+## Reading from Files
+
+Reading of entire file:
+
+```elixir
+case File.read(filename) do
+  {:ok, lines} ->
+    IO.puts(lines)
+
+  {:error, details} ->
+    IO.puts("Unable to read #{filename}: #{details}")
+end
+```
+
+If the file is large, that is likely to be a bad idea. Instead the [IO.read/2](https://hexdocs.pm/elixir/1.15.4/IO.html#read/2) function offers more control. In this case we read the first couple of characters (but there is also an option for reading a line):
+
+```elixir
+{:ok, reader} = File.open(filenameThis)
+
+reader
+|> IO.read(5)
+|> IO.puts()
+
+File.close(reader)
+```
+
+## Removing Files
+
+Finally, lets clean up after ourselves:
+
+```elixir
+File.rm(filename)
+```
