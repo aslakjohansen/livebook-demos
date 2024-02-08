@@ -29,4 +29,5 @@ Tools:
 Useful techniques:
 - [Filesystem](filesystem.livemd)
 - [Dynamic graphics (both vector and bitmapped)](dynamic-graphics.livemd)
+- [Plotting functions](plotting-functions.livemd)
 

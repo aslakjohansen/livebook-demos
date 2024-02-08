@@ -1,0 +1,86 @@
+# Plotting Functions
+
+```elixir
+Mix.install([
+  {:vega_lite, "~> 0.1.5"},
+  {:kino_vega_lite, "~> 0.1.7"},
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Imports
+
+```elixir
+import :math
+alias VegaLite, as: Vl
+```
+
+## Producing Data
+
+Lets look at a function:
+
+$
+f(x) = sin(2x) \cdot cos(x)
+$
+
+<!-- livebook:{"break_markdown":true} -->
+
+We can bind the `f` variable to an anonymous function that implements this:
+
+```elixir
+f = fn x -> :math.sin(x * 2) * :math.cos(x) end
+```
+
+Lets test it by using the `.` operator to call the function:
+
+```elixir
+f.(12)
+```
+
+## Presenting Data
+
+Using a [comprehension](https://elixir-lang.org/getting-started/comprehensions.html) we can produce a timeseries:
+
+```elixir
+values =
+  for x <- 1..10000,
+      do:
+        (x / 100)
+        |> (fn x -> %{x: x, y: f.(x)} end).()
+```
+
+Lets try to plot it:
+
+```elixir
+Vl.new(width: 720, height: 100)
+|> Vl.data_from_values(values)
+|> Vl.mark(:line)
+|> Vl.encode_field(:x, "x", type: :quantitative, title: "x")
+|> Vl.encode_field(:y, "y", type: :quantitative, title: "sin(2x)*cos(x)")
+```
+
+## Live Data
+
+Alternatively, lets try to produce the data on demand and update the view periodically:
+
+```elixir
+# how quickly to produce a new point
+interval = 100
+
+# where to plot
+kino =
+  Vl.new(width: 400, height: 400)
+  |> Vl.mark(:line)
+  |> Vl.encode_field(:x, "x", type: :quantitative)
+  |> Vl.encode_field(:y, "y", type: :quantitative)
+  |> Kino.VegaLite.new()
+  |> Kino.render()
+
+# add a new point
+fun = fn _, {kino, x} ->
+  Kino.VegaLite.push(kino, %{x: x, y: f.(x)}, window: 100)
+  {:cont, {kino, x + 0.1}}
+end
+
+Kino.listen(interval, {kino, 0}, fun)
+```
