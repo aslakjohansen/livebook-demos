@@ -1,6 +1,6 @@
 # LiveBook Demos
 
-A collection of [LiveBook](https://livebook.dev) demos.
+This repository contains a collection of [LiveBook](https://livebook.dev) demos.
 
 Links to [documentation](documentation.livemd).
 
