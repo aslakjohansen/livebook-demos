@@ -1,0 +1,88 @@
+# Pipelines
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"}
+])
+```
+
+## Introduction
+
+Pipelining is a pattern whereby a series of functions are called, and the result of any one function is used as the first input to the following function.
+
+Example:
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+name      = input("your name?")
+resultset = lookup(name, database)
+processed = process(resultset)
+outcome   = report(processed)
+```
+
+## Pipe Operator
+
+This pattern is so common that Elixir -- like many other functional languages -- has introducted a pipe operator `|>` that allows the above snippet to be rewritten as:
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+outcome =
+  input("your name?")
+  |> lookup(database)
+  |> process()
+  |> report()
+```
+
+**Note:** If your editor is using a font with ligatures, the pipe operator will be rendered as `▷`.
+
+## Example
+
+Sample data:
+
+```elixir
+data = """
+evening Monday
+morning Friday
+lunch tUesday
+night monday
+
+morning thusday
+
+
+"""
+```
+
+Mapping from day abbreviation to day index:
+
+```elixir
+days = %{"mon" => 0, "tue" => 1, "wed" => 2, "thu" => 3, "fri" => 4, "sat" => 5, "sun" => 6}
+```
+
+Lets extract the set of date indices that are mentioned in the sample data:
+
+```elixir
+mentioned_days =
+  data
+  |> String.trim_trailing("\n")
+  |> String.downcase()
+  |> String.split("\n")
+  |> Enum.filter(fn entry -> entry != "" end)
+  |> Enum.map(fn entry ->
+    entry
+    |> String.split(" ")
+    |> Enum.at(1)
+    |> String.slice(0, 3)
+    |> (fn abbrev -> Map.get(days, abbrev) end).()
+  end)
+  |> MapSet.new()
+  |> dbg()
+```
+
+Here, the last step of the pipeline (the call to `dbg()`) will -- when the `Kino` module is loaded -- provide a number of extra features:
+
+* Firstly, it does **not** affect what the expression is evaluating to.
+* Each step of the pipeline is listed between the code cell and its result.
+* Visual controls are added to the right of each pipeline step. These can be used to toggle the step.
+* When clicking on a pipeline step, the output of that step can be inspected.
