@@ -326,6 +326,14 @@ Map.fetch!(m, "a")
 Map.fetch!(m, "d")
 ```
 
+To differentiate between functions with the same name and different arity, it is convention to add a use the `"#{name}/#{arity}"` format. You often see this in the official documentation.
+
+In the `ParabolicFunction` module we have the following functions:
+
+* `roots/3`
+* `calc_discriminant/3`
+* `calc_roots/3`
+
 ## Tuples
 
 You have already seen a number of tuples in the above material. Visually they are a pair of curly braces surrounding a comma-separated list of terms. Behind the scenes, it is a collection of a fixed number of contiguous terms that is ordered and indexable. Any entry can have any type.
