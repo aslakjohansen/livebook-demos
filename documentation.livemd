@@ -1,0 +1,20 @@
+# Documentation
+
+## Sources
+
+Some sources of information:
+
+1. [Getting started guide](https://hexdocs.pm/elixir/introduction.html) on hexdocs.
+2. [Built-in modules](https://hexdocs.pm/elixir/) on hexdocs.
+3. [Unofficial modules](https://hexdocs.pm/) on hexdocs.
+4. [Videos showing Livebook features](https://www.youtube.com/@livebookdev) on youtube.
+5. [José Valim solving "Advent of Code 2021" on Livebook](https://www.youtube.com/watch?v=mDxJjqx5-ns&list=PLNP8vc86_-SOV1ZEvX_q9BLYWL586zWnF) on a youtube playlist.
+6. [Further resources](https://elixir-lang.org/learning.html) on elixir-lang.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Hovering the mouse over an element in a code cell that has make a window of the official documentation (from hexdocs) pop up:
+
+```elixir
+String.to_integer("42")
+```
