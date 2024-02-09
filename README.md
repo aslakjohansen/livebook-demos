@@ -2,7 +2,7 @@
 
 A collection of [LiveBook](https://livebook.dev) demos.
 
-Links to [Documentation](documentation.livemd).
+Links to [documentation](documentation.livemd).
 
 ([Elixir](https://elixir-lang.org)) language features:
 - [Basic data types](basic-data-types.livemd)
