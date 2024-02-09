@@ -10,6 +10,7 @@ Links to [documentation](documentation.livemd).
 - [Pattern matching](pattern-matching.livemd)
 - [Pipelines](pipelines.livemd)
 - [Primitive concurrency](primitive-concurrency.livemd)
+- [Generic servers, registries and supervision](generic-servers.livemd)
 - [Protocols](protocols.livemd)
 
 Modules:

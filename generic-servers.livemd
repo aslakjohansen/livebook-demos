@@ -1,0 +1,425 @@
+# Generic Servers, Registries and Supervision
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"}
+])
+```
+
+## Introduction
+
+In Elixir, servers are processes that execute code defined in modules that implements the [GenServer](https://hexdocs.pm/elixir/GenServer.html) behaviour. This allows them to define a client-side interface as well as a server-side endpoint patterns. The code on the client-side sends messages to the server processes that triggers code execution at the matching endpoint. This endpoint has access to server state and returns a tuple that (among others) includes the new state and -- if relevant -- a return term that the GenServer module will send back to the client.
+
+There are two ways for the client-side to contact the server:
+
+1. Through a **cast** were no response is intended. This operation returns immediately.
+2. Through a **call** where a response is needed. This operation blocks until a response has been received.
+
+These servers are sometimes called *actors* and sometimes *nanoservices*. Each running server is identified by a `pid` (process id) and any server you can name through such a pid -- independently of which physical machine in the cluster is hosting it -- can be communicated. In fact, there is no difference between the code needed for local and remote communcation, and there is no need to worry about marshalling.
+
+## Wrapping State in a Server
+
+Here's the code for a simple server. It contains some state, and the client-side interface allows for:
+
+* Fetching the state through the `get/1` function.
+* Assigning a new term to the state through the `set/2` function.
+* Performing an operation on the state through the `manipulate/2` function.
+
+The code looks line this:
+
+```elixir
+defmodule State do
+  use GenServer
+
+  # (client) interface
+
+  def start_link() do
+    GenServer.start_link(__MODULE__, nil)
+  end
+
+  def get(server) do
+    GenServer.call(server, {:get})
+  end
+
+  def set(server, value) do
+    GenServer.cast(server, {:set, value})
+  end
+
+  def manipulate(server, function) when is_function(function, 1) do
+    GenServer.cast(server, {:manipulate, function})
+  end
+
+  # callbacks
+
+  @impl true
+  def init(_) do
+    # 0 is the initial state
+    {:ok, 0}
+  end
+
+  @impl true
+  def handle_call({:get}, _from, state) do
+    {:reply, state, state}
+  end
+
+  @impl true
+  def handle_cast({:set, value}, _state) do
+    {:noreply, value}
+  end
+
+  @impl true
+  def handle_cast({:manipulate, function}, state) do
+    {:noreply, function.(state)}
+  end
+end
+```
+
+Lets start a `State` process:
+
+```elixir
+pid =
+  Kino.Process.render_seq_trace(fn ->
+    {:ok, pid} = State.start_link()
+    pid
+  end)
+```
+
+What is the initial state?
+
+```elixir
+Kino.Process.render_seq_trace(fn ->
+  State.get(pid)
+end)
+|> IO.puts()
+```
+
+Lets override the value:
+
+```elixir
+Kino.Process.render_seq_trace(fn ->
+  State.set(pid, 42)
+end)
+```
+
+Now would be a good time to verify that the value has been updated:
+
+```elixir
+Kino.Process.render_seq_trace(fn ->
+  State.get(pid) |> IO.puts()
+end)
+```
+
+That looks a lot more complicated! The reason for this is that `IO.puts()` is implemented through message passing as well.
+
+<!-- livebook:{"break_markdown":true} -->
+
+**Note:** In the examples above, the code for interacting with the `State` module has been wrapped in `Kino.Process.render_seq_trace` calls. This is purely to produce sequence diagrams, and not necessesary for interacting with the server:
+
+```elixir
+State.get(pid) |> IO.puts()
+```
+
+Finally, lets try out the `manipulate` function:
+
+```elixir
+incr = fn value -> value + 1 end
+
+Kino.Process.render_seq_trace(fn ->
+  State.manipulate(pid, incr)
+  State.get(pid) |> IO.puts()
+end)
+```
+
+## Named Servers
+
+It can get cumbersome to keep track of servers by their pid. If we only need a single server of this type we can hardcode a name for it. That name can be any term. In the following example we use the name `:state`. Only the client-side interface needs to be updated. The name will be automatically translated into a pid.
+
+```elixir
+defmodule NamedState do
+  use GenServer
+
+  # (client) interface
+
+  def start_link(_) do
+    GenServer.start_link(__MODULE__, nil, name: :state)
+  end
+
+  def start() do
+    GenServer.start(__MODULE__, nil, name: :state)
+  end
+
+  def get() do
+    GenServer.call(:state, {:get})
+  end
+
+  def set(value) do
+    GenServer.cast(:state, {:set, value})
+  end
+
+  def manipulate(function) when is_function(function, 1) do
+    GenServer.cast(:state, {:manipulate, function})
+  end
+
+  # callbacks
+
+  @impl true
+  def init(_) do
+    # 0 is the initial state
+    {:ok, 0}
+  end
+
+  @impl true
+  def handle_call({:get}, _from, state) do
+    {:reply, state, state}
+  end
+
+  @impl true
+  def handle_cast({:set, value}, _state) do
+    {:noreply, value}
+  end
+
+  @impl true
+  def handle_cast({:manipulate, function}, state) do
+    {:noreply, function.(state)}
+  end
+end
+```
+
+Lets try it out:
+
+```elixir
+Kino.Process.render_seq_trace(fn ->
+  area = fn r -> 3.14 * r * r end
+  {:ok, _pid} = NamedState.start()
+  NamedState.set(256)
+  NamedState.manipulate(area)
+  NamedState.get() |> IO.puts()
+end)
+```
+
+## Crashes
+
+If we mistreat the proces it is going to crash:
+
+```elixir
+oopsie = fn r -> r / 0 end
+NamedState.manipulate(oopsie)
+```
+
+## Supervision
+
+A [Supervisor](https://hexdocs.pm/elixir/Supervisor.html) is a process (or server; if you will) whose sole purpose is to manage (or supervise) the lifecycle of other processes. As input it needs a list of child definitions and a restart strategy. The child definitions can take many forms, but they all include information about what should be started with which parameters. The restart strategy dictates how it should deal with a crashed child.
+
+```elixir
+defmodule NamedStateSupervisor do
+  use Supervisor
+
+  def start_link(opts \\ []) do
+    Supervisor.start_link(__MODULE__, :ok, opts)
+  end
+
+  @impl true
+  def init(:ok) do
+    children = [
+      NamedState
+    ]
+
+    Supervisor.init(children, strategy: :one_for_one)
+  end
+end
+```
+
+Start the supervisor:
+
+```elixir
+{:ok, supervisor_pid} = NamedStateSupervisor.start_link()
+```
+
+In a typical program, you will see a tree of supervisors supervising other supervisors in order to define comples restart behaviors. This is a minimal example though, and here the supervision tree look like this:
+
+```elixir
+Kino.Process.render_sup_tree(supervisor_pid)
+```
+
+Lets try to test it, and leave a bit of time for the supervisor to do its work:
+
+```elixir
+Kino.Process.render_seq_trace(fn ->
+  NamedState.set(256)
+  NamedState.get() |> IO.puts()
+  NamedState.manipulate(oopsie)
+  :timer.sleep(1000)
+  NamedState.get() |> IO.puts()
+  NamedState.set(256)
+  NamedState.get() |> IO.puts()
+end)
+```
+
+That's quite a mouthfull! But the end result is that the supervisor did its job. Although, the result would have been less kind without the 1 second delay. We have a race between `NamedState.get/0` sending a message to the `NamedState` server (that has crashed) and the supervisor restarting it. If the former comes first, it will crash as well. Often crashes will cascade a bit, and -- during this partial unavailability -- it will result in reduced performance, or worse. But with supervision, this is handled automatically and the damage is limited.
+
+**Note:** If you squint your eyes, you can see how the first three messages goes to one process, which then emits an `EXIT` message. This is received by the supervisor which spawns a new `NamedState` process that server the last two messages.
+
+## Registries
+
+A [Registry](https://hexdocs.pm/elixir/Registry.html) is a key-value store whose interface supports a number of patterns. In this example we use it for looking up processes (servers) so that we can hide the dispatch complexity.
+
+For this purpose we need unique keys and we need to give the registry a name that we can later refer to:
+
+```elixir
+{:ok, registry_pid} = Registry.start_link(name: StateRegistry, keys: :unique)
+```
+
+To make use of it, we redefine the `State` module. The callbacks remain unchanged. But we add a `via_tuple/1` function that builds a so-called *via_tuple* this tells the undelying `GenServer` logic to look up `name` in the `StateRegistry` registry, and update all interface functions to use it. The result:
+
+```elixir
+defmodule RegisteredState do
+  use GenServer
+
+  # (client) interface
+
+  def start_link(name) do
+    GenServer.start_link(__MODULE__, nil, name: via_tuple(name))
+  end
+
+  def start(name) do
+    GenServer.start(__MODULE__, nil, name: via_tuple(name))
+  end
+
+  def get(name) do
+    GenServer.call(via_tuple(name), {:get})
+  end
+
+  def set(name, value) do
+    GenServer.cast(via_tuple(name), {:set, value})
+  end
+
+  def manipulate(name, function) when is_function(function, 1) do
+    GenServer.cast(via_tuple(name), {:manipulate, function})
+  end
+
+  # helpers
+
+  defp via_tuple(name) do
+    {:via, Registry, {StateRegistry, name}}
+  end
+
+  # callbacks
+
+  @impl true
+  def init(_) do
+    # 0 is the initial state
+    {:ok, 0}
+  end
+
+  @impl true
+  def handle_call({:get}, _from, state) do
+    {:reply, state, state}
+  end
+
+  @impl true
+  def handle_cast({:set, value}, _state) do
+    {:noreply, value}
+  end
+
+  @impl true
+  def handle_cast({:manipulate, function}, state) do
+    {:noreply, function.(state)}
+  end
+end
+```
+
+Start a few `RegisteredState` servers:
+
+```elixir
+{_, state_rust_pid} = RegisteredState.start_link("Rust")
+{_, state_elixir_pid} = RegisteredState.start_link("Elixir")
+{_, state_erlang_pid} = RegisteredState.start_link("Erlang")
+%{rust: state_rust_pid, elixir: state_elixir_pid, erlang: state_erlang_pid}
+```
+
+Lets try it out:
+
+```elixir
+IO.puts("Initial Rust state:   #{RegisteredState.get("Rust")}")
+IO.puts("Initial Elixir state: #{RegisteredState.get("Elixir")}")
+IO.puts("Initial Erlang state: #{RegisteredState.get("Erlang")}")
+
+RegisteredState.set("Rust", 1)
+RegisteredState.set("Elixir", 2)
+RegisteredState.set("Erlang", 3)
+
+IO.puts("Final Rust state:   #{RegisteredState.get("Rust")}")
+IO.puts("Final Elixir state: #{RegisteredState.get("Elixir")}")
+IO.puts("Final Erlang state: #{RegisteredState.get("Erlang")}")
+```
+
+**Note:** While strings has been used as keys for the registry in this example, any *term* is a valid key. You will often see tuples used as keys.
+
+## Dynamic Supervision
+
+Now we have a registry for keeping track of our `RegisteredState` servers, but they are not supervised. The previous supervisor won't work as it operates on a fixed set of children. What we need is something that can supervise a set of children that changes over time. What we need is a [DynamicSupervisor](https://hexdocs.pm/elixir/DynamicSupervisor.html)!
+
+```elixir
+{:ok, dyn_supervisor_pid} =
+  DynamicSupervisor.start_link(name: RegisteredStateSupervisor, strategy: :one_for_one)
+```
+
+Lets instruct our new dynamic supervisor to start a few `RegisteredState` servers:
+
+```elixir
+{_, state_c_pid} =
+  DynamicSupervisor.start_child(RegisteredStateSupervisor, {RegisteredState, "C"})
+
+{_, state_zig_pid} =
+  DynamicSupervisor.start_child(RegisteredStateSupervisor, {RegisteredState, "Zig"})
+
+{_, state_python_pid} =
+  DynamicSupervisor.start_child(RegisteredStateSupervisor, {RegisteredState, "Python"})
+
+%{c: state_c_pid, zig: state_zig_pid, python: state_python_pid}
+```
+
+This should be reflected by the supervision tree:
+
+```elixir
+Kino.Process.render_sup_tree(dyn_supervisor_pid)
+```
+
+Verify that the interface works:
+
+```elixir
+IO.puts("Initial C state:   #{RegisteredState.get("C")}")
+IO.puts("Initial Elixir state: #{RegisteredState.get("Elixir")}")
+IO.puts("Initial Python state: #{RegisteredState.get("Python")}")
+
+RegisteredState.set("C", 4)
+RegisteredState.set("Elixir", 5)
+RegisteredState.set("Python", 6)
+
+IO.puts("Final C state:   #{RegisteredState.get("C")}")
+IO.puts("Final Elixir state: #{RegisteredState.get("Elixir")}")
+IO.puts("Final Python state: #{RegisteredState.get("Python")}")
+```
+
+And finally, verify that the supervision works (this code relies on the C process now having been restarted):
+
+```elixir
+pid =
+  case state_c_pid do
+    {:already_started, pid} -> pid
+    pid -> pid
+  end
+
+IO.puts("pid of C process: #{inspect(pid)}")
+
+IO.puts("C state before kill: #{RegisteredState.get("C")}")
+Process.exit(pid, :kill)
+:timer.sleep(1000)
+IO.puts("C state after kill:  #{RegisteredState.get("C")}")
+```
+
+Notice that the supervision tree now reflects that one of the children has been restarted.
+
+```elixir
+Kino.Process.render_sup_tree(dyn_supervisor_pid)
+```
