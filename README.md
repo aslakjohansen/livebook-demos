@@ -12,6 +12,7 @@ Links to [documentation](documentation.livemd).
 - [Primitive concurrency](primitive-concurrency.livemd)
 - [Generic servers, registries and supervision](generic-servers.livemd)
 - [Protocols](protocols.livemd)
+- [Doctests](doctests.livemd)
 
 Modules:
 - [JSON](json.livemd) with the jason module.

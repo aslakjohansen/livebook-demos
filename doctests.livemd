@@ -1,0 +1,58 @@
+# Doctests
+
+## Introduction
+
+Many languages use *docstrings* to include code-specific documentation alongside the code it relates to. Elixir does the same, and the docstring format used by elixir is markdown-derived. This is what goes into the documentation on [Hexdocs](https://hexdocs.pm).
+
+One interesting segment of the per-function docstrings is the inclusion of concrete examples of the use. Evaluating a module definition involves treating the examples as simple test cases and checking them. Any failing examples will produce a warning, and -- in Livebook -- the results get highlighted as seen in the example below. This provides a guarantee -- when no warnings are emitted -- of the correctness of the examples.
+
+This is sometimes referred to as *doctests* and can be seen as a form of non-exhaustive unit tests. Elixir does, however, in [ExUnit](https://hexdocs.pm/ex_unit/ExUnit.html) have a fully featured unit testing framework.
+
+## Example
+
+A trivial module with five doctests (one of which is failing):
+
+```elixir
+defmodule Math do
+  @doc """
+  Returns sum of the furst and the second arguments.
+
+  ## Examples:
+
+    iex> Math.add(1, 2)
+    3
+
+    iex> Math.add(1, -1)
+    0
+
+    iex> Math.add(-1, 1)
+    1
+  """
+  def add(a, b) do
+    a + b
+  end
+
+  @doc """
+  Returns the first argument divided by the second.
+
+  ## Examples:
+
+    iex> Math.div(1, 10)
+    0.1
+
+    iex> Math.div(1, 0)
+    ** (ArithmeticError) bad argument in arithmetic expression
+  """
+  def div(a, b) do
+    a / b
+  end
+end
+```
+
+We can now use the definitions:
+
+```elixir
+Math.add(1, 1)
+```
+
+**Note:** If you have evaluating the code cell containing the definition of the `Math` module and hover your mouse over the "add" text in the above code cell you should see the documentation pop up.
