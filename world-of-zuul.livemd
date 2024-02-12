@@ -1,0 +1,353 @@
+# World of Zuul
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.10.0"}
+])
+```
+
+## Introduction
+
+*World of Zuul* is a [colossal cave adventure](https://en.wikipedia.org/wiki/Colossal_Cave_Adventure) game. In this game, a player can explore a world modelled as a graph. The player is always in a node (called a cave, room, or *space*), and can transition to other nodes by following an edge (called an *exit*). Some rooms may contain items that can be picked up and monsters that can be fought. Some exits may onl become transitionable when carrying certain items (e.g., keys). A text based interface is provided so that a player can issue commands.
+
+This implementation explores what an implementation of this game would look like if implemented using the [actor model](https://en.wikipedia.org/wiki/Actor_model). Concretely, it is implemented in [Elixir](https://elixir-lang.org) on top of [LiveBook](https://livebook.dev).
+
+Design choices include:
+
+* A node (called a *space*) is implemented as a GenServer.
+* A player is implemented as a GenServer.
+* There are two dynamic supervisors; one for nodes, and one for players.
+* There are two registries; one for nodes, and one for players.
+
+Consequences of this:
+
+* Should a node or player fail, it will be restarted with default state. While a persistence layer could be added for state permanence, the links between nodes and users are symbolic and will thus survive a restart.
+* It becomes a multiplayer game where players in the same space can interact.
+
+Obvious extensions:
+
+* Implement `say` command to send a message to all players in the same room.
+* Add persistence (e.g., through [CubDB](https://github.com/lucaong/cubdb)).
+* Make `Space` a [behaviour](https://elixir-lang.org/getting-started/typespecs-and-behaviours.html#behaviours).
+* Garbage collection of players through timeouts.
+
+## Configuration
+
+Define world graph:
+
+```elixir
+spaces = [
+  %{title: "entrance", exits: %{"door" => "hallway"}},
+  %{title: "hallway", exits: %{"left" => "leftroom", "right" => "rightroom"}},
+  %{title: "leftroom", exits: %{"end" => "back"}},
+  %{title: "rightroom", exits: %{"end" => "back"}},
+  %{title: "back", exits: %{"start" => "entrance"}}
+]
+
+initial_space = "entrance"
+```
+
+Visualize it as a sanity check:
+
+```elixir
+contents =
+  List.foldl(spaces, "graph LR;\n", fn space, acc ->
+    src = space[:title]
+
+    Map.to_list(space[:exits])
+    |> List.foldl(acc, fn {key, value}, acc ->
+      acc <> "  #{src}-- #{key} -->#{value};\n"
+    end)
+  end)
+
+Kino.Mermaid.new(contents)
+```
+
+## Code
+
+Definition of a `Space`:
+
+```elixir
+defmodule Space do
+  use GenServer
+
+  defstruct title: "the title", message: "welcome message", exits: %{}
+
+  # interface
+
+  def start_link(%{title: title} = opts) do
+    GenServer.start_link(__MODULE__, opts, name: via_tuple(title))
+  end
+
+  def get_text(title) do
+    GenServer.call(via_tuple(title), {:get_text})
+  end
+
+  def peak_exit(title, exit) do
+    GenServer.call(via_tuple(title), {:peak_exit, exit})
+  end
+
+  # helpers
+
+  defp via_tuple(title) do
+    {:via, Registry, {SpaceRegistry, title}}
+  end
+
+  # callbacks
+
+  @impl true
+  def init(opts) do
+    state = struct(Space, opts)
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_call({:get_text}, _from, state) do
+    text = """
+      You have come to #{state.title}!
+
+      There appear to be the following exits:
+      #{state.exits |> Map.keys() |> Enum.map(fn key -> "- #{key}" end) |> Enum.join("\n")}
+    """
+
+    {:reply, text, state}
+  end
+
+  @impl true
+  def handle_call({:peak_exit, exit}, _from, state) do
+    response =
+      case Map.get(state.exits, exit) do
+        nil -> {:unknown, exit}
+        space -> {:ok, space}
+      end
+
+    {:reply, response, state}
+  end
+end
+```
+
+Definition of a `Player`:
+
+```elixir
+defmodule Player do
+  use GenServer
+
+  defstruct name: "Jane Doe", location: initial_space, id: nil
+
+  # interface
+
+  def start_link({id, name}) do
+    GenServer.start_link(__MODULE__, [name: name, id: id], name: via_tuple(id))
+  end
+
+  def command(pid, command, frame) do
+    GenServer.cast(pid, {:command, command, frame})
+  end
+
+  def message(name, message) do
+    GenServer.cast(via_tuple(name), {:message, message})
+  end
+
+  # helpers
+
+  defp via_tuple(name) do
+    {:via, Registry, {PlayerRegistry, name}}
+  end
+
+  # callbacks
+
+  @impl true
+  def init(opts) do
+    state = struct(Player, opts)
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_cast({:command, command, frame}, state) do
+    append(frame, "**>** #{command}", state.id)
+
+    {response, new_state} =
+      case command do
+        "whoami" ->
+          {"You are '#{state.name}'", state}
+
+        "whereami" ->
+          {"You are at '#{state.location}'", state}
+
+        "date" ->
+          date =
+            DateTime.utc_now()
+            |> DateTime.to_string()
+
+          {date, state}
+
+        "go " <> direction ->
+          {message, new_state} =
+            case Space.peak_exit(state.location, direction) do
+              {:ok, location} ->
+                {
+                  Space.get_text(location),
+                  %{state | location: location}
+                }
+
+              {:unknown, direction} ->
+                {"You are confused, '#{direction}' does not make sense.", state}
+            end
+
+          {message, new_state}
+
+        "say " <> statement ->
+          {"**#{state.name}:** #{statement}", state}
+
+        _ ->
+          {"Hmm, I don't know what to do with that?!?", state}
+      end
+
+    append(frame, response, new_state.id)
+    {:noreply, new_state}
+  end
+
+  @impl true
+  def handle_cast({:message, message}, state) do
+    append(state.frame, message, state.id)
+    {:noreply, state}
+  end
+
+  # helpers
+
+  defp append(frame, text, id) do
+    frame
+    |> Kino.Frame.append(Kino.Markdown.new(text), to: id)
+  end
+end
+```
+
+## Supervision
+
+Supervision and registry for spaces:
+
+```elixir
+defmodule SpaceSystemSupervisor do
+  use Supervisor
+
+  def start_link(init_arg) do
+    Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
+  end
+
+  @impl true
+  def init(_init_arg) do
+    children = [
+      {Registry, name: SpaceRegistry, keys: :unique},
+      {DynamicSupervisor, name: SpaceSupervisor, strategy: :one_for_one}
+    ]
+
+    Supervisor.init(children, strategy: :rest_for_one)
+  end
+end
+```
+
+Supervision and registry for players:
+
+```elixir
+defmodule PlayerSystemSupervisor do
+  use Supervisor
+
+  # interface
+
+  def start_link(init_arg) do
+    Supervisor.start_link(__MODULE__, init_arg, name: __MODULE__)
+  end
+
+  def get_player(id, name) do
+    case DynamicSupervisor.start_child(PlayerSupervisor, {Player, {id, name}}) do
+      {:ok, pid} ->
+        pid
+
+      {:error, {:already_started, pid}} ->
+        pid
+    end
+  end
+
+  # callback
+
+  @impl true
+  def init(_init_arg) do
+    children = [
+      {Registry, name: PlayerRegistry, keys: :unique},
+      {DynamicSupervisor, name: PlayerSupervisor, strategy: :one_for_one}
+    ]
+
+    Supervisor.init(children, strategy: :rest_for_one)
+  end
+end
+```
+
+Put the supervision tree together:
+
+```elixir
+children = [
+  {SpaceSystemSupervisor, name: SpaceSystemSupervisor},
+  {PlayerSystemSupervisor, name: PlayerSystemSupervisor}
+]
+
+{:ok, supervisor_pid} = Supervisor.start_link(children, strategy: :one_for_one)
+Kino.Process.render_sup_tree(supervisor_pid)
+```
+
+## Demo
+
+Load spaces:
+
+```elixir
+Enum.map(spaces, fn space ->
+  {:ok, _space_pid} = DynamicSupervisor.start_child(SpaceSupervisor, {Space, space})
+end)
+```
+
+Visualize how this populates the supervision tree:
+
+```elixir
+Kino.Process.render_sup_tree(supervisor_pid, direction: :left_right)
+```
+
+Try looking up a room:
+
+```elixir
+[{entrance_pid, _}] = Registry.lookup(SpaceRegistry, "entrance")
+entrance_pid
+```
+
+Test:
+
+```elixir
+# DynamicSupervisor.start_child(PlayerSupervisor, {Player, {42, "Player One"}})
+# Kino.Process.render_sup_tree(supervisor_pid)
+```
+
+## Interface
+
+```elixir
+frame = Kino.Frame.new()
+```
+
+```elixir
+elements = [
+  name: Kino.Input.text("Name:"),
+  command: Kino.Input.text("Command:")
+]
+
+form = Kino.Control.form(elements, submit: "Send", reset_on_submit: [:command])
+```
+
+Run event loop:
+
+```elixir
+Kino.Frame.render(frame, Kino.Markdown.new("*World of Zuul*"))
+Kino.Frame.append(frame, Kino.Markdown.new(Space.get_text(initial_space)))
+
+for event <- Kino.Control.stream(form) do
+  %{data: %{name: name, command: command}, type: _type, origin: origin} = event
+  player = PlayerSystemSupervisor.get_player(origin, name)
+  Player.command(player, command, frame)
+end
+```

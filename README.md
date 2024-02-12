@@ -20,12 +20,13 @@ Modules:
 - [Neo4j](neo4j.livemd) with the bolt_sips module.
 - [RDF](rdf.livemd) with the rdf and sparql modules.
 
-Well-known problems:
+Well-known problems (and lesser-known ones):
 - [Dining Philosophers](dining-philosopers.livemd)
 - [L-Systems](lsystem.livemd)
 - [Mandelbrot Fractal](mandelbrot.livemd)
 - [Sūdoku](sudoku.livemd)
 - [Traveling Salesman Problem](tsp.livemd)
+- [World of Zuul](world-of-zuul.livemd)
 
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)
