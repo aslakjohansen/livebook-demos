@@ -1,0 +1,142 @@
+# Persistent Embedded Key-Value Store with CubDB
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"},
+  {:cubdb, "~> 2.0"}
+])
+```
+
+## Introduction
+
+This notebook illustrates the use of [CubDB](https://github.com/lucaong/cubdb), an embedded key-value database with ACID properties and multi version concurrency control.
+
+**Note:** Operations on a CubDB store are asynchronous, and thus racy in nature. For instance, a *read* operation may succeed even though it is preceded by a *delete* operation on the same key.
+
+## Setup
+
+```elixir
+cwd = File.cwd!()
+datadir_kino = Kino.Input.text("Directory for persisting database:", default: "#{cwd}/cubdb_demo")
+```
+
+Start database process:
+
+```elixir
+datadir = Kino.Input.read(datadir_kino)
+{:ok, db} = CubDB.start_link(data_dir: datadir)
+```
+
+We will be working with two keys in particular:
+
+```elixir
+{xander, willow} = {
+  {"Harris", "Xander"},
+  {"Rosenberg", "Willow"}
+}
+```
+
+**Note:** Any term can be used as key (or value, for that matter).
+
+## Basic Operations
+
+Insert money into some accounts:
+
+```elixir
+{
+  CubDB.put(db, xander, 100),
+  CubDB.put(db, willow, 200)
+}
+```
+
+Verify that it worked:
+
+```elixir
+{
+  CubDB.get(db, xander),
+  CubDB.get(db, willow)
+}
+```
+
+## Transactions
+
+Lets transfer 20 gold from Willow to Xander:
+
+```elixir
+src = willow
+dst = xander
+amount = 20
+
+CubDB.transaction(db, fn tx ->
+  src_balance = CubDB.Tx.get(tx, src)
+  dst_balance = CubDB.Tx.get(tx, dst)
+
+  if src_balance >= amount do
+    tx =
+      tx
+      |> CubDB.Tx.put(src, src_balance - amount)
+      |> CubDB.Tx.put(dst, dst_balance + amount)
+
+    {:commit, tx, :ok}
+  else
+    {:cancel, :insufficient_funds}
+  end
+end)
+```
+
+Verify that it worked:
+
+```elixir
+{
+  CubDB.get(db, xander),
+  CubDB.get(db, willow)
+}
+```
+
+## Snapshotted Operations
+
+When operating with transactions, snapshots allows us to get at concistent view of the state across multiple keys:
+
+```elixir
+CubDB.with_snapshot(db, fn snap ->
+  xander_balance = CubDB.Snapshot.get(snap, xander)
+  willow_balance = CubDB.Snapshot.get(snap, willow)
+
+  {xander_balance, willow_balance}
+end)
+```
+
+## Selections
+
+The simplest selection is to go through every key-value pair:
+
+```elixir
+CubDB.select(db)
+|> Stream.map(fn {{fname, gname}, value} -> "**#{gname} #{fname}:** #{value}\n" end)
+|> Enum.join("\n")
+|> Kino.Markdown.new()
+```
+
+**Note:** The [select](https://hexdocs.pm/cubdb/CubDB.html#select/2) function has options for narrowing down the scope of the selection.
+
+## Removing Entries
+
+Remove used keys:
+
+```elixir
+{
+  CubDB.delete(db, xander),
+  CubDB.delete(db, willow)
+}
+```
+
+Verify that it worked:
+
+```elixir
+{
+  CubDB.get(db, xander),
+  CubDB.get(db, willow)
+}
+```
+
+**Note:** The database is still present on the disk.
