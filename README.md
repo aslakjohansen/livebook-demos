@@ -30,6 +30,7 @@ Well-known problems (and lesser-known ones):
 
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)
+- [Timestamp and log lines received over a serial line](uart.livemd)
 - [HTTP server supporting GET requests against root filesystem](http-server.livemd)
 
 Useful techniques:

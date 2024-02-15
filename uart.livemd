@@ -1,0 +1,145 @@
+# UART
+
+```elixir
+Mix.install([
+  {:circuits_uart, "~> 1.3"},
+  {:vega_lite, "~> 0.1.5"},
+  {:kino_vega_lite, "~> 0.1.7"},
+  {:kino, "~> 0.8.0"}
+])
+```
+
+## Introduction
+
+This livebook opens a serial port. Whenever a line is received over it, this line is timestamped and appended to a logfile.
+
+## Discovery
+
+```elixir
+uarts = Circuits.UART.enumerate()
+```
+
+## Configuration
+
+```elixir
+kino_device = Kino.Input.text("Device name", default: "ttyUSB0")
+kino_speed = Kino.Input.text("Device speed", default: "115200")
+kino_filename = Kino.Input.text("Filename", default: "uart_log.csv")
+
+Kino.Layout.grid([kino_device, kino_speed, kino_filename])
+```
+
+```elixir
+device = Kino.Input.read(kino_device)
+speed = String.to_integer(Kino.Input.read(kino_speed))
+filename = Kino.Input.read(kino_filename)
+IO.puts("port #{device} @ #{speed} baud → #{filename}")
+```
+
+## Logger
+
+GenServer for logging time/value pairs to a CSV file:
+
+```elixir
+defmodule LogDumper do
+  use GenServer
+
+  # interface
+
+  def start_link(filename) do
+    GenServer.start_link(__MODULE__, {filename}, name: __MODULE__)
+  end
+
+  def append(entries) do
+    GenServer.cast(__MODULE__, {:append, entries})
+  end
+
+  # callbacks
+
+  @impl true
+  def init({filename}) do
+    {:ok, _file} = File.open(filename, [:append])
+  end
+
+  @impl true
+  def handle_cast({:append, entries}, file) do
+    write(file, entries)
+    {:noreply, file}
+  end
+
+  # helpers
+
+  defp write(_file, []) do
+    nil
+  end
+
+  defp write(file, [first | remaining]) do
+    IO.write(file, "#{first[:t] / 1000},#{first[:value]}\n")
+    write(file, remaining)
+  end
+end
+```
+
+Start the logger:
+
+```elixir
+{:ok, pid_logger} = LogDumper.start_link(filename)
+```
+
+## Gateway
+
+```elixir
+defmodule Gateway do
+  use GenServer
+
+  # behaviour functions
+
+  def start_link(device, speed) do
+    GenServer.start(__MODULE__, {device, speed}, name: __MODULE__)
+  end
+
+  # callback functions
+
+  @impl true
+  def init({device, speed}) do
+    {:ok, uart_pid} = Circuits.UART.start_link()
+
+    :ok =
+      Circuits.UART.open(uart_pid, device,
+        speed: speed,
+        active: true,
+        framing: Circuits.UART.Framing.Line
+      )
+
+    {:ok, %{device: device, speed: speed, pid: uart_pid}}
+  end
+
+  #  @impl true
+  #  def handle_info({:circuits_uart, _, {:error, :eio}}, state) do
+  #    disconnect(state)
+  #  end
+
+  @impl true
+  def handle_info({:circuits_uart, _, payload}, state) do
+    IO.puts("Message: " <> payload)
+
+    LogDumper.append([
+      %{t: :os.system_time(:milli_seconds), value: String.trim_trailing(payload)}
+    ])
+
+    {:noreply, state}
+  end
+end
+```
+
+Start the gateway:
+
+```elixir
+{:ok, gateway_pid} = Gateway.start_link(device, speed)
+```
+
+Kill the process when we are done:
+
+```elixir
+Process.exit(gateway_pid, :kill)
+```
