@@ -1,0 +1,80 @@
+# Leibniz Approximation of Pi
+
+```elixir
+Mix.install([
+  {:vega_lite, "~> 0.1.6"},
+  {:kino_vega_lite, "~> 0.1.10"}
+])
+```
+
+## Introduction
+
+Implementation of the [Leibniz series for approximation of π](https://en.wikipedia.org/wiki/Leibniz_formula_for_%CF%80).
+
+In short, it states that:
+
+$\frac{\pi}{4} = 1 - \frac{1}{3} + \frac{1}{5} - \frac{1}{7} + \frac{1}{9} - \ldots = \sum_{k=0}^{\infty} \frac{(-1)^{k}}{2k + 1}$
+
+## Implementation
+
+```elixir
+defmodule Pi do
+  defp generate_minus(acc, current, last_step) when current > last_step do
+    acc
+  end
+
+  defp generate_minus(acc, current, last_step) do
+    generate_plus(acc - 1 / current, current + 2, last_step)
+  end
+
+  defp generate_plus(acc, current, last_step) when current > last_step do
+    acc
+  end
+
+  defp generate_plus(acc, current, last_step) do
+    generate_minus(acc + 1 / current, current + 2, last_step)
+  end
+
+  def generate(last_step) do
+    4 * generate_minus(1, 3, last_step)
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Pi.generate(1_000_000_000)
+```
+
+## Visualization
+
+```elixir
+alias VegaLite, as: Vl
+```
+
+```elixir
+pi = :math.pi()
+
+data =
+  0..100
+  |> Enum.map(fn value -> value * 2 + 1 end)
+  |> Enum.map(fn value ->
+    [
+      %{"legend" => "Pi", "x" => value, "y" => pi},
+      %{"legend" => "Approximation", "x" => value, "y" => Pi.generate(value)}
+    ]
+  end)
+  |> List.flatten()
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Vl.new(width: 660, height: 300)
+|> Vl.data_from_values(data)
+|> Vl.mark(:line)
+|> Vl.encode_field(:x, "x", type: :temporal)
+|> Vl.encode_field(:y, "y", type: :quantitative)
+|> Vl.encode_field(:color, "legend", type: :nominal)
+```

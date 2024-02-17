@@ -28,6 +28,9 @@ Well-known problems (and lesser-known ones):
 - [Traveling Salesman Problem](tsp.livemd)
 - [World of Zuul](world-of-zuul.livemd)
 
+Classical algorithms:
+- [Leibniz approximation of π](leibniz-pi.livemd)
+
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)
 - [Timestamp and log lines received over a serial line](uart.livemd)
