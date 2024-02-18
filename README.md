@@ -30,6 +30,7 @@ Well-known problems (and lesser-known ones):
 
 Classical algorithms:
 - [Leibniz approximation of π](leibniz-pi.livemd)
+- [Newton–Raphson method for root finding](newton-raphson.livemd)
 
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)

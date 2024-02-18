@@ -1,0 +1,181 @@
+# Newton–Raphson Method for Root Finding
+
+```elixir
+Mix.install([
+  {:vega_lite, "~> 0.1.6"},
+  {:kino_vega_lite, "~> 0.1.10"}
+])
+```
+
+## Introduction
+
+This is an implementation of the [Newton-Raphson method](https://en.wikipedia.org/wiki/Newton%27s_method).
+
+**Summary:** Under certain (relatively common) conditions, a root of a function can be a approximated by following a sequence of steps of the form:
+
+$x_{n+1} = x_n - \frac{f(x_n)}{f'(x_n)}$
+
+## Sample Functions
+
+Suite of sample formulas (along with their derivatives):
+
+```elixir
+suite = %{
+  "x²+x-1" => %{
+    function: fn x -> x * x + x - 1 end,
+    derivative: fn x -> 2 * x + 1 end,
+    range: {-2, 2},
+    initial: 0
+  },
+  "0.02*x³-x²+3" => %{
+    function: fn x -> 0.02 * x * x * x - x * x + 3 end,
+    derivative: fn x -> 0.06 * x * x - 2 * x end,
+    range: {-35, 55},
+    initial: 30
+  },
+  "sin(x)" => %{
+    function: fn x -> :math.sin(x) end,
+    derivative: fn x -> :math.cos(x) end,
+    range: {-1, 7},
+    initial: 4
+  }
+}
+```
+
+Pick formula from suite:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+case_input =
+  Kino.Input.select(
+    "Sample function",
+    suite
+    |> Map.keys()
+    |> Enum.map(fn key -> {key, key} end)
+  )
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+case = Kino.Input.read(case_input)
+fundef = Map.get(suite, case)
+```
+
+## Implementation
+
+Algorithm itself:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+defmodule NewtonRaphson do
+  def approximate(_fundef, x, 0 = _ttl) do
+    x
+  end
+
+  def approximate(%{function: f, derivative: fmark} = fundef, x, ttl) do
+    IO.puts(fmark.(x))
+    x_next = x - f.(x) / fmark.(x)
+    approximate(fundef, x_next, ttl - 1)
+  end
+end
+```
+
+## Calculation of dataset
+
+Convenient definitions:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{xmin, xmax} = fundef.range
+xinit = fundef.initial
+res = 600
+```
+
+Zero-line:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+data_zero =
+  [
+    %{"legend" => "Zero", "x" => xmin, "y" => 0},
+    %{"legend" => "Zero", "x" => xmax, "y" => 0}
+  ]
+```
+
+Polyline of function:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+data_curve =
+  (xmin * res)..(xmax * res)
+  |> Enum.map(fn x -> x / res end)
+  |> Enum.map(fn x ->
+    y = fundef.function.(x)
+    %{"legend" => case, "x" => x, "y" => y}
+  end)
+```
+
+Approximation path:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+data_approx =
+  0..30
+  |> Enum.map(fn ttl ->
+    x = NewtonRaphson.approximate(fundef, xinit, ttl)
+    y = fundef.function.(x)
+
+    [
+      %{"legend" => "Approximation", "x" => x, "y" => 0},
+      %{"legend" => "Approximation", "x" => x, "y" => y}
+    ]
+  end)
+  |> List.flatten()
+```
+
+Full dataset:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+data =
+  data_zero
+  |> Enum.concat(data_curve)
+  |> Enum.concat(data_approx)
+```
+
+## Visualization
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+alias VegaLite, as: Vl
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Vl.new(width: 660, height: 300)
+|> Vl.data_from_values(data)
+|> Vl.mark(:line)
+|> Vl.encode_field(:x, "x", type: :quantitative, sort: nil, scale: %{domain: [xmin, xmax]})
+|> Vl.encode_field(:y, "y", type: :quantitative)
+|> Vl.encode_field(:color, "legend", type: :nominal, title: "Legend")
+```
+
+Approximate root:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+data_approx
+|> List.last()
+|> Map.get("x")
+```
