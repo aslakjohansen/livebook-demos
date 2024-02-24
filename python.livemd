@@ -1,0 +1,55 @@
+# Python Integration
+
+```elixir
+Mix.install([
+  {:py_cell, github: "NduatiK/py_cell"}
+])
+```
+
+## Introduction
+
+This is an example of using the [py_cell](https://github.com/NduatiK/py_cell) module. It allows for some level of integration with Python 3 code.
+
+By installing the module, you gain access to the Python smart cell. This allows you to write python code and expose a single function within this code. That function can be executed by making a single call to `PyCell.run/2`.
+
+It uses the `python3` command on the host machine to evaluate the python code, and has access to the modules available to this installation.
+
+## Function Call Example
+
+<!-- livebook:{"attrs":"eyJmdW5jdGlvbl9uYW1lIjoiYWRkIiwicHl0aG9uX2NvZGUiOiJkZWYgYWRkKGEsIGIpOlxuICByZXR1cm4gYSArIGIifQ","chunks":null,"kind":"Elixir.PyCell","livebook_object":"smart_cell"} -->
+
+```elixir
+require PyCell
+
+code = """
+def add(a, b):
+  return a + b
+"""
+
+PyCell.open_port("add", code)
+```
+
+```elixir
+PyCell.run("add", [1, 2])
+```
+
+## Module Import Example
+
+<!-- livebook:{"attrs":"eyJmdW5jdGlvbl9uYW1lIjoiZ2V0X3BpIiwicHl0aG9uX2NvZGUiOiJpbXBvcnQgbWF0aFxuXG5kZWYgZ2V0X3BpKCk6XG4gIHJldHVybiBtYXRoLnBpIn0","chunks":null,"kind":"Elixir.PyCell","livebook_object":"smart_cell"} -->
+
+```elixir
+require PyCell
+
+code = """
+import math
+
+def get_pi():
+  return math.pi
+"""
+
+PyCell.open_port("get_pi", code)
+```
+
+```elixir
+PyCell.run("get_pi", [])
+```
