@@ -1,0 +1,196 @@
+# Working with Operating System Processes
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"},
+  {:rambo, "~> 0.3.4"},
+  {:muontrap, "~> 1.4"}
+])
+```
+
+## Introduction
+
+Lets explore some options for the classical `system` function:
+
+* [:os.cmd](https://www.erlang.org/doc/man/os.html#cmd-1) Access to running a command in an OS shell.
+* [Port](https://hexdocs.pm/elixir/Port.html) Fundamental mechanism for starting operating system processes.
+* [System.cmd/3](https://hexdocs.pm/elixir/System.html#cmd/3) Handy abstraction on top of `Port`.
+* [Rambo](https://github.com/jayjun/rambo) Appears fairly mature and easy to use.
+* [MuonTrap](https://hexdocs.pm/muontrap/readme.html) Supports supervision and [cgroups](https://en.wikipedia.org/wiki/Cgroups) control of external processes, and proper management of long-running processes.
+
+Below, you will find examples for a subset of these. The set of examples is in no way complete.
+
+[Porcelain](https://hexdocs.pm/porcelain/readme.html) appears to have issues and has thus been left out.
+
+<!-- livebook:{"break_markdown":true} -->
+
+**Note:** These examples are going to assume that you are on a UNIX system.
+
+## Using :os.cmd/1
+
+Execute command in a shell:
+
+```elixir
+:os.cmd(~c"echo hello")
+```
+
+Both input and output are charlists. To convert to a string→string interface, you could do this:
+
+```elixir
+"echo hello"
+|> to_charlist()
+|> :os.cmd()
+|> to_string()
+```
+
+## Using System.cmd/3
+
+Execute a command with a parameter and get printouts and return code:
+
+```elixir
+{output, return_code} = System.cmd("echo", ["hello"])
+```
+
+Execute command within a custom environment (derived from the current one):
+
+```elixir
+{output, return_code} = System.cmd("env", [], env: [{"CUTEST_ANIMAL", "alpaca"}])
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+output
+|> String.split("\n")
+|> Enum.sort()
+|> Enum.map(fn line ->
+  case String.split(line, "=") do
+    [key, value] -> " - **#{key}:** #{value}\n"
+    _ -> ""
+  end
+end)
+|> Enum.join()
+|> Kino.Markdown.new()
+```
+
+**Note:** A few parameters of this function have been left out of this coverage:
+
+* `:cd` for setting the current directory for the OS process.
+* `:stderr_to_stdout` for redirecting `STDERR` into `STDOUT`.
+
+## Using Port
+
+Data can be sent to an OS process (via STDIN) and received from it (via STDOUT):
+
+```elixir
+port = Port.open({:spawn, "cat"}, [:binary])
+
+send(port, {self(), {:command, "hello"}})
+
+receive do
+  {_port, {:data, msg}} -> IO.puts(msg)
+end
+```
+
+**Note:** The `port` keys the messages should you wish to communicate with two of these.
+
+<!-- livebook:{"break_markdown":true} -->
+
+An OS process that has been started in this way can be killed:
+
+```elixir
+send(port, {self(), :close})
+```
+
+**Note:** `Port` can do a number of other things. See documentation for details.
+
+## Using Rambo
+
+Execute a command with a parameter and get printouts and return code:
+
+```elixir
+{:ok, %Rambo{status: status, out: out, err: err}} = Rambo.run("echo", ["hello"])
+```
+
+Execute command within a custom environment (derived from current one):
+
+```elixir
+{:ok, %Rambo{status: status, out: out, err: err}} =
+  Rambo.run("env", [], env: [{"CUTEST_ANIMAL", "alpaca"}])
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+out
+|> String.split("\n")
+|> Enum.sort()
+|> Enum.map(fn line ->
+  case String.split(line, "=") do
+    [key, value] -> " - **#{key}:** #{value}\n"
+    _ -> ""
+  end
+end)
+|> Enum.join()
+|> Kino.Markdown.new()
+```
+
+Providing one-shot input (via STDIN):
+
+```elixir
+{:ok, %Rambo{status: status, out: out, err: err}} =
+  Rambo.run("cat", in: "hello")
+```
+
+Pipeline of external programs to list the (alphabetically) first 10 files in the current directory:
+
+```elixir
+{:ok, %Rambo{status: status, out: out, err: err}} =
+  Rambo.run("ls")
+  |> Rambo.run("sort")
+  |> Rambo.run("head", ["-10"])
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+out
+|> String.split("\n")
+|> Enum.filter(fn line -> not (line == "") end)
+|> List.foldl({1, ""}, fn line, {i, acc} -> {i + 1, acc <> "#{i}. #{line}\n"} end)
+|> elem(1)
+|> Kino.Markdown.new()
+```
+
+**Note:** To run Rambo inside a GenServer, use this [trick](https://hexdocs.pm/rambo/Rambo.html#module-caveats).
+
+## Using MuonTrap
+
+Execute a command with a parameter and get printouts and return code:
+
+```elixir
+{output, return_code} = MuonTrap.cmd("echo", ["hello"])
+```
+
+`MuonTrap.cmd/3` supports all the `System.cmd/3` options that have been covered in this document.
+
+In addition to this, it (among others) supports:
+
+* `:timeout` and `:delay_to_sigkill` to define when and how to automatically make the command exit.
+* `:uid` and `gid` to define the UID and GID values for the command.
+* A number of cgroup related options.
+
+## Conclusions
+
+There are lots of options with some nice and easily accessible features, especially at the simple end.
+
+<!-- livebook:{"break_markdown":true} -->
+
+So far, however, I haven't found exactly what I was looking for. That is:
+
+* Supervision of OS process like MuonTrap.
+* Wrapping in a GenServer for supervision of itself.
+* An interface function for sending to STDIN.
+* An interface function for sending aritrary signals.
+* Something pubsuby that allows STDOUT and STDERR to be treated either separably or the same.
+* Implementation of he [GenStage](https://hexdocs.pm/gen_stage/GenStage.html) behaviour. Not sure about the tradeoffs here though.
