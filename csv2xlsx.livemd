@@ -1,0 +1,168 @@
+# CSV to XLSX File Conversion
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.11.0"},
+  {:elixlsx, "~> 0.5.1"}
+])
+```
+
+## Introduction
+
+Excel is a poplular spreadsheet program that has its own *interpretation* of what a CSV file is.
+
+This workbook allows you to upload a CSV file, choose a separator (string), and name the columns. It will then produce a `xlsx` file (aka an Excel file) and allow this to be downloaded.
+
+## Upload CSV File
+
+```elixir
+filename_kino = Kino.Input.file("Upload CSV file:")
+```
+
+```elixir
+fileref = Kino.Input.read(filename_kino)
+filename = Kino.Input.file_path(fileref.file_ref)
+```
+
+## Explore Upload
+
+Determine column separator:
+
+```elixir
+sep_kino = Kino.Input.text("Column separator:", default: ",")
+```
+
+```elixir
+sep = Kino.Input.read(sep_kino)
+```
+
+First parsing phase:
+
+```elixir
+input =
+  filename
+  |> File.read!()
+  |> String.split("\n")
+  |> Enum.map(&String.trim/1)
+  |> Enum.map(fn line ->
+    line
+    |> String.split(sep)
+  end)
+```
+
+Please name the columns:
+
+```elixir
+col_count =
+  input
+  |> Enum.map(&length/1)
+  |> Enum.reduce(&max/2)
+
+col_elements =
+  1..col_count
+  |> Enum.map(fn col -> Kino.Input.text("Name column #{col}:", default: col) end)
+
+form = Kino.Layout.grid(col_elements)
+```
+
+Convert to list of maps for easy displaying:
+
+```elixir
+col2name =
+  1..col_count
+  |> Enum.map(fn col ->
+    Kino.Input.read(Enum.at(col_elements, col - 1))
+  end)
+
+input =
+  input
+  |> Enum.map(fn entry ->
+    entry
+    |> Enum.with_index(fn value, index -> {Enum.at(col2name, index), value} end)
+    |> Map.new()
+  end)
+
+# |> Enum.take(100)
+```
+
+Now, we can display the data on tabular format:
+
+```elixir
+Kino.DataTable.new(input)
+```
+
+## Generate Excel Sheets
+
+```elixir
+defmodule Sheet do
+  alias Elixlsx.{Sheet}
+
+  def produce_csv(sheet, input, col2name) do
+    sheet
+    |> Sheet.set_cell("A1", "CSV to Excel Conversion", bold: true, italic: true)
+    |> Sheet.set_row_height(1, 16)
+    |> Sheet.set_row_height(2, 2)
+    |> add_header(col2name)
+    |> add_data(col2name, input)
+  end
+
+  defp add_header(sheet, col2name) do
+    col2name
+    |> Enum.with_index(fn name, col -> {col, name} end)
+    |> List.foldl(sheet, fn {col, name}, sheet ->
+      cell = cellname(col, 3)
+      Sheet.set_cell(sheet, cell, name, bold: true)
+    end)
+  end
+
+  defp add_data(sheet, col2name, input) do
+    input
+    |> List.foldl({sheet, 4}, fn entry, {sheet, row} ->
+      sheet =
+        col2name
+        |> Enum.with_index(fn name, col -> {col, name} end)
+        |> List.foldl(sheet, fn {col, name}, sheet ->
+          cell = cellname(col, row)
+          value = Map.get(entry, name)
+          Sheet.set_cell(sheet, cell, value)
+        end)
+
+      {sheet, row + 1}
+    end)
+    |> elem(0)
+  end
+
+  defp cellname(col, row) do
+    map =
+      "A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z"
+      |> String.split(",")
+
+    "#{Enum.fetch!(map, col)}#{row}"
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+sheets = [
+  Elixlsx.Sheet.with_name("Contents")
+  |> Sheet.produce_csv(input, col2name)
+]
+```
+
+## Present Download Option
+
+```elixir
+filename = "converted.xlsx"
+
+file_producer = fn ->
+  {:ok, {_filename, contents}} =
+    %Elixlsx.Workbook{sheets: sheets}
+    |> Elixlsx.write_to_memory(filename)
+
+  contents
+end
+
+Kino.Download.new(file_producer, filename: filename)
+```
