@@ -36,6 +36,7 @@ Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)
 - [Timestamp and log lines received over a serial line](uart.livemd)
 - [HTTP server supporting GET requests against root filesystem](http-server.livemd)
+- [Serial terminal](serial-terminal.livemd)
 - [CSV to XLSX file conversion](csv2xlsx.livemd)
 
 Useful techniques:
