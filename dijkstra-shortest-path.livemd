@@ -1,0 +1,299 @@
+# Dijkstra's Algorithm for Single-Source Shortest Path
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"}
+])
+```
+
+## Introduction
+
+This is an implementation of [Dijkstra's algorithm](https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm) for the single-source [shortest path problem](https://en.wikipedia.org/wiki/Shortest_path_problem). In short, it finds the shortest path from a single node to all other reachable nodes in a graph with weighted edges.
+
+## Graph Module
+
+```elixir
+defmodule Graph do
+  @pad 50
+  @r 20
+  @sw 2
+
+  def visualize(nodes, edges, source \\ nil, select \\ []) do
+    {xmin, xmax, ymin, ymax} = get_bbox(nodes)
+
+    select = Enum.concat([select, Enum.map(select, fn {s, d} -> {d, s} end)])
+
+    node_locations =
+      nodes
+      |> Enum.map(fn %{id: id} = node -> {id, node} end)
+      |> Map.new()
+
+    edge_code =
+      edges
+      |> Enum.map(fn {src, dst} ->
+        src_node = Map.get(node_locations, src)
+        dst_node = Map.get(node_locations, dst)
+
+        multiplier =
+          if select == [] or Enum.member?(select, {src_node.id, dst_node.id}) do
+            1
+          else
+            0.1
+          end
+
+        "  <line x1=\"#{src_node.x}\" y1=\"#{src_node.y}\" x2=\"#{dst_node.x}\" y2=\"#{dst_node.y}\" stroke=\"rgb(0,0,0)\" stroke-width=\"#{@sw * multiplier}\" />\n"
+      end)
+      |> Enum.join()
+
+    node_code =
+      nodes
+      |> Enum.map(fn %{x: x, y: y, id: id} ->
+        color =
+          if id == source do
+            "rgb(0,0,255)"
+          else
+            "rgb(0,0,0)"
+          end
+
+        fill =
+          if id == source do
+            "rgb(230,230,255)"
+          else
+            "rgb(255,255,255)"
+          end
+
+        "  <circle cx=\"#{x}\" cy=\"#{y}\" r=\"#{@r}\" fill=\"#{fill}\" stroke=\"#{color}\" stroke-width=\"#{@sw}\" />" <>
+          "  <text x=\"#{x}\" y=\"#{y}\" fill=\"#{color}\" dominant-baseline=\"middle\" text-anchor=\"middle\">N
+          <tspan dx=\"-3\" dy=\"6\" font-size=\"small\">#{id}</tspan></text>"
+      end)
+      |> Enum.join("\n")
+
+    """
+    <svg viewBox="#{xmin} #{ymin} #{xmax} #{ymax}" xmlns="http://www.w3.org/2000/svg">
+    #{edge_code}
+    #{node_code}
+    </svg>
+    """
+  end
+
+  defp get_bbox(nodes) do
+    {xmin, xmax} =
+      nodes
+      |> Enum.map(fn %{x: x} -> x end)
+      |> Enum.min_max()
+
+    {ymin, ymax} =
+      nodes
+      |> Enum.map(fn %{y: y} -> y end)
+      |> Enum.min_max()
+
+    {xmin - @pad, xmax + @pad, ymin - @pad, ymax + @pad}
+  end
+end
+```
+
+## Problem Generation
+
+Definitions:
+
+```elixir
+edges = [
+  {"1", "2"},
+  {"1", "3"},
+  {"2", "3"},
+  {"2", "4"},
+  {"2", "6"},
+  {"3", "20"},
+  {"3", "6"},
+  {"3", "7"},
+  {"4", "5"},
+  {"4", "8"},
+  {"5", "6"},
+  {"5", "8"},
+  {"5", "9"},
+  {"6", "10"},
+  {"6", "20"},
+  {"7", "20"},
+  {"8", "16"},
+  {"9", "12"},
+  {"9", "16"},
+  {"10", "11"},
+  {"10", "13"},
+  {"11", "12"},
+  {"11", "14"},
+  {"12", "17"},
+  {"13", "14"},
+  {"13", "15"},
+  {"13", "20"},
+  {"16", "17"},
+  {"16", "17"},
+  {"17", "18"},
+  {"17", "19"}
+]
+
+nodes = [
+  %{id: "1", x: 120, y: 140},
+  %{id: "2", x: 260, y: 170},
+  %{id: "3", x: 220, y: 250},
+  %{id: "4", x: 330, y: 150},
+  %{id: "5", x: 400, y: 230},
+  %{id: "6", x: 330, y: 290},
+  %{id: "7", x: 170, y: 330},
+  %{id: "8", x: 470, y: 180},
+  %{id: "9", x: 450, y: 280},
+  %{id: "10", x: 350, y: 380},
+  %{id: "11", x: 410, y: 410},
+  %{id: "12", x: 500, y: 350},
+  %{id: "13", x: 270, y: 460},
+  %{id: "14", x: 390, y: 510},
+  %{id: "15", x: 190, y: 540},
+  %{id: "16", x: 560, y: 230},
+  %{id: "17", x: 640, y: 290},
+  %{id: "18", x: 660, y: 390},
+  %{id: "19", x: 690, y: 240},
+  %{id: "20", x: 270, y: 350}
+]
+```
+
+Injection of edges into nodes:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+nodes =
+  nodes
+  |> Enum.map(fn %{id: id} = def ->
+    edgeset =
+      edges
+      |> Enum.map(fn pair ->
+        case pair do
+          {a, b} when a == id -> b
+          {a, b} when b == id -> a
+          _ -> nil
+        end
+      end)
+      |> Enum.filter(fn value -> not (value == nil) end)
+
+    Map.put(def, :edges, edgeset)
+  end)
+```
+
+## Problem Visualization
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+svg_code = Graph.visualize(nodes, edges)
+svg = Kino.Image.new(svg_code, :svg)
+
+widget =
+  Kino.Frame.new()
+  |> Kino.render()
+  |> Kino.Frame.render(svg)
+```
+
+## Picking a Source
+
+Pick source:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+node_ids = nodes |> Enum.map(fn %{id: id} -> {id, id} end)
+source_node_kino = Kino.Input.select("Select source node:", node_ids)
+```
+
+Which source was picked?
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+src_node = Kino.Input.read(source_node_kino)
+```
+
+## Problem Solving
+
+```elixir
+defmodule Dijkstra do
+  def solve(nodes, source_node) do
+    dist = produce_distace_map(nodes)
+    prev = nodes |> Enum.map(fn node -> {node.id, nil} end) |> Map.new()
+
+    nodemap = nodes |> Enum.map(fn node -> {node.id, node} end) |> Map.new()
+
+    worklist =
+      nodes
+      |> Enum.map(fn %{id: id} -> {id, nil} end)
+      |> Map.new()
+      |> Map.put(source_node, 0)
+
+    {_worklist, _dist, prev} = rec(nodemap, worklist, dist, prev)
+
+    _solution =
+      prev
+      |> Enum.filter(fn {_k, v} -> not (v == nil) end)
+  end
+
+  defp rec(_nodemap, worklist, dist, prev) when worklist == %{} do
+    {worklist, dist, prev}
+  end
+
+  defp rec(nodemap, worklist, dist, prev) do
+    {src_id, src_dist} = Enum.min_by(worklist, fn {_node, value} -> value end)
+
+    {worklist, dist, prev} =
+      worklist
+      |> Map.delete(src_id)
+      |> Enum.to_list()
+      |> List.foldl({%{}, dist, prev}, fn {id, best}, {w, d, p} ->
+        if Map.get(nodemap, src_id).edges |> Enum.member?(id) do
+          candidate_dist = src_dist + Map.get(dist, {src_id, id})
+
+          if candidate_dist < best do
+            {Map.put(w, id, candidate_dist), d, Map.put(p, id, src_id)}
+          else
+            {Map.put(w, id, best), d, p}
+          end
+        else
+          {Map.put(w, id, best), d, p}
+        end
+      end)
+
+    rec(nodemap, worklist, dist, prev)
+  end
+
+  defp produce_distace_map(nodes) do
+    nodes
+    |> Enum.map(fn src ->
+      nodes
+      |> Enum.map(fn dst ->
+        {dy, dx} = {dst.y - src.y, dst.x - src.x}
+        dist = :math.sqrt(dy ** 2 + dx ** 2)
+        {{dst.id, src.id}, dist}
+      end)
+    end)
+    |> List.flatten()
+    |> Map.new()
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+solution = Dijkstra.solve(nodes, src_node)
+```
+
+## Solution Visualization
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+solution_svg_code = Graph.visualize(nodes, edges, src_node, solution)
+solution_svg = Kino.Image.new(solution_svg_code, :svg)
+
+solution_widget =
+  Kino.Frame.new()
+  |> Kino.render()
+  |> Kino.Frame.render(solution_svg)
+```
