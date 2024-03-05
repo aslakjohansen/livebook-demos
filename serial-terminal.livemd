@@ -176,11 +176,13 @@ Kino.Markdown.new(
   "**Configuration:**" <>
     """
     Port `#{device}` at `#{speed}` b/s with `#{data_bit}` data bits and `#{stop_bit}` stop bit(s).
-    * **Description:** #{device_config.description}
-    * **Manufacturer:** #{device_config.manufacturer}
-    * **Vendor ID:** #{device_config.vendor_id}
-    * **Product ID:** #{device_config.product_id}
-    * **Serial Number:** #{device_config.serial_number}
+
+    Info:
+    * **Description:** #{Map.get(device_config, :description, "*unknown*")}
+    * **Manufacturer:** #{Map.get(device_config, :manufacturer, "*unknown*")}
+    * **Vendor ID:** #{Map.get(device_config, :vendor_id, "*unknown*")}
+    * **Product ID:** #{Map.get(device_config, :product_id, "*unknown*")}
+    * **Serial Number:** #{Map.get(device_config, :serial_number, "*unknown*")}
     """
 )
 ```
