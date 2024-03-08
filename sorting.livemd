@@ -1,0 +1,139 @@
+# Sorting with Quicksort and Merge Sort
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"},
+  {:vega_lite, "~> 0.1.5"},
+  {:kino_vega_lite, "~> 0.1.7"}
+])
+```
+
+## Introduction
+
+Sorting has long been one of the classic disciplines of algorithmics. In fact, it is so important that it takes up half of the title of the [rd volume of ["The Art of Computer Programming"](https://en.wikipedia.org/wiki/The_Art_of_Computer_Programming)!
+
+This workbook implements two sorting algorithms, namely [Quicksort](https://en.wikipedia.org/wiki/Quicksort) and [Merge Sort](https://en.wikipedia.org/wiki/Merge_sort).
+
+## Cases
+
+```elixir
+cases = %{
+  "small" => [2, 6, 3, 1, 5, 9, 7, 8, 0, 4],
+  "100_000 uniform(1024)" => 1..100_000 |> Enum.map(fn _ -> :rand.uniform(1024) end),
+  "100_000 normal(1024)" => 1..100_000 |> Enum.map(fn _ -> :rand.uniform(1024) end)
+}
+```
+
+## Algorithms
+
+Merge-sort:
+
+```elixir
+defmodule MergeSort do
+  def sort([]), do: []
+  def sort([v]), do: [v]
+
+  def sort(input) do
+    l = trunc(length(input) / 2)
+    {left, right} = Enum.split(input, l)
+    merge(sort(left), sort(right))
+  end
+
+  defp merge([], v), do: v
+  defp merge(v, []), do: v
+  defp merge([x | xs], [y | ys]) when x <= y, do: [x | merge(xs, [y | ys])]
+  defp merge([x | xs], [y | ys]), do: [y | merge([x | xs], ys)]
+end
+```
+
+Quicksort:
+
+```elixir
+defmodule QuickSort do
+  def sort([]) do
+    []
+  end
+
+  def sort([pivot | input]) do
+    {pre, post} = Enum.split_with(input, fn value -> value < pivot end)
+    Enum.concat(sort(pre), [pivot | sort(post)])
+  end
+end
+```
+
+```elixir
+algorithms = %{
+  "Merge-Sort" => &MergeSort.sort/1,
+  "Quicksort" => &QuickSort.sort/1
+}
+```
+
+## Interface
+
+```elixir
+elements = [
+  Kino.Input.select("Case:", Enum.map(cases, fn {k, _v} -> {k, k} end)),
+  Kino.Input.select("Algorithm:", Enum.map(algorithms, fn {k, _v} -> {k, k} end))
+]
+
+Kino.Layout.grid(elements)
+```
+
+```elixir
+[case_name, algorithm_name] =
+  Enum.map(elements, fn element -> Kino.Input.read(element) end)
+```
+
+```elixir
+{case, algorithm} = {
+  Map.get(cases, case_name),
+  Map.get(algorithms, algorithm_name)
+}
+```
+
+## Execution
+
+```elixir
+t0 = :os.system_time(:millisecond)
+sorted = algorithm.(case)
+t1 = :os.system_time(:millisecond)
+sorted
+```
+
+```elixir
+"Execution took #{t1 - t0}ms"
+```
+
+## Verification
+
+Visual check:
+
+```elixir
+alias VegaLite, as: Vl
+
+data = Enum.with_index(sorted, fn value, i -> %{"i" => i, "value" => value} end)
+
+Vl.new(width: 600, height: 512)
+|> Vl.data_from_values(data)
+|> Vl.transform(
+  filter: [
+    and: [
+      [field: "i", valid: true],
+      [field: "value", valid: true]
+    ]
+  ]
+)
+|> Vl.mark(:rect)
+|> Vl.encode_field(:x, "i", type: :quantitative, bin: [maxbins: 256])
+|> Vl.encode_field(:y, "value", type: :quantitative, bin: [maxbins: 256])
+|> Vl.encode(:color, aggregate: :count)
+|> Vl.config(view: [stroke: nil])
+|> Kino.VegaLite.new()
+```
+
+Proper verification:
+
+```elixir
+sorted
+|> List.foldl({0, true}, fn value, {last, success} -> {value, success and last <= value} end)
+```
