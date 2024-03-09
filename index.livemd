@@ -1,0 +1,19 @@
+# Index through Repository Readme
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"}
+])
+```
+
+## Introduction
+
+Livebook has some trouble loading links in new tabs. This can be really annoying when you have a repository with several notebooks that you want to open.
+
+Links in markdown code can be opened in new tabs, so I just reuse my repository [README.md](README.md) file:
+
+```elixir
+(__DIR__ <> "/README.md")
+|> File.read!()
+|> Kino.Markdown.new()
+```
