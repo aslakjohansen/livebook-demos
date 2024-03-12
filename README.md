@@ -33,6 +33,7 @@ Classical algorithms:
 - [Newton–Raphson method for root finding](newton-raphson.livemd)
 - [Dijkstra's algorithm for single-source shortest path](dijkstra-shortest-path.livemd)
 - [Sorting with quicksort and merge sort](sorting.livemd)
+- [Levenshtein distance calculation and pathfinding](levenshtein.livemd)
 
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)

@@ -1,0 +1,260 @@
+# Levenshtein Distance
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.12.3"}
+])
+```
+
+## Introduction
+
+This notebook calculated the [Levenshtein distance](https://en.wikipedia.org/wiki/Levenshtein_distance) between two strings and illustrates the transformation path from one to the other. The Levenshtein distance is a metric for how different two strings are. It sums up the operations (insertion, removal and substitution of a single character) needed to transform one string into the other.
+
+The metric is defined as:
+
+$
+\operatorname{lev}(a, b) = \begin{cases}
+  \operatorname{len}(a) & \text{ if } \operatorname{len}(b) = 0, \\
+  \operatorname{len}(b) & \text{ if } \operatorname{len}(a) = 0, \\
+  \operatorname{lev}\big(\operatorname{tail}(a),\operatorname{tail}(b)\big) & \text{ if } \operatorname{head}(a)= \operatorname{head}(b), \\
+  1 + \min \begin{cases}
+
+```
+      \operatorname{lev}\big(\operatorname{tail}(a), \operatorname{tail}(b)\big) \\
+      \operatorname{lev}\big(\operatorname{tail}(a), b\big) \\
+      \operatorname{lev}\big(a, \operatorname{tail}(b)\big) \\
+   \end{cases} & \text{ otherwise}
+```
+
+\end{cases}
+$
+
+Here, $\operatorname{len}(c)$ is the length of $c$, $\operatorname{head}(c)$ is the first element of $c$, and $\operatorname{tail}(c)$ is the remaining elements of $c$ ; those that are left if the "head" is removed.
+
+**Note:** Variants exists where different costs are used for insertion, removal and substitution.
+
+## Input
+
+```elixir
+elements = [
+  Kino.Input.text("Input 1:", default: "inexplainable"),
+  Kino.Input.text("Input 2:", default: "explicit")
+]
+
+Kino.Layout.grid(elements)
+```
+
+```elixir
+[input1, input2] =
+  Enum.map(elements, fn element -> Kino.Input.read(element) end)
+```
+
+## Distance Calculation
+
+**Note:** While this particular implementation is easy to understand, it is also horribly inefficient.
+
+```elixir
+defmodule LevenshteinDistance do
+  def calc(a, b) when is_binary(a) and is_binary(b) do
+    calc(String.graphemes(a), String.graphemes(b))
+  end
+
+  def calc(a, []), do: length(a)
+  def calc([], b), do: length(b)
+  def calc([a | as], [b | bs]) when a == b, do: calc(as, bs)
+
+  def calc([_a | as] = ass, [_b | bs] = bss) do
+    1 +
+      Enum.min([
+        calc(as, bss),
+        calc(ass, bs),
+        calc(as, bs)
+      ])
+  end
+end
+```
+
+```elixir
+LevenshteinDistance.calc(input1, input2)
+```
+
+## Path Illustration
+
+```elixir
+defmodule LevenshteinSpace do
+  @cellw 50
+  @cellh 50
+  @pathw 22
+
+  def illustrate(a, b) when is_binary(a) and is_binary(b) do
+    a = String.graphemes(a)
+    b = String.graphemes(b)
+    alength = length(a)
+    blength = length(b)
+
+    coord2entry = build_coord2entry(a, b)
+    cells = calc_cells(coord2entry)
+    cell_code = produce_cell_code(cells)
+
+    path_code =
+      coord2entry
+      |> calc_path({alength - 1, blength - 1})
+      |> produce_path_code()
+
+    header_code = produce_header_code(a, b)
+
+    """
+    <svg viewBox="#{0} #{0} #{(alength + 2) * @cellw} #{(blength + 2) * @cellh}" xmlns="http://www.w3.org/2000/svg">
+    #{header_code}
+    #{cell_code}
+    #{path_code}
+    </svg>
+    """
+  end
+
+  defp build_coord2entry(as, bs) do
+    # base cases
+    coord2entry =
+      ((-1..length(as)
+        |> Enum.map(fn i -> %{x: i, y: -1, dist: i + 1} end)) ++
+         (-1..length(bs)
+          |> Enum.map(fn i -> %{x: -1, y: i, dist: i + 1} end)))
+      |> Enum.map(fn entry -> {{entry.x, entry.y}, entry} end)
+      |> Map.new()
+
+    # fill out
+    bs
+    |> Enum.with_index()
+    |> List.foldl(coord2entry, fn {belem, bindex}, coord2entry ->
+      as
+      |> Enum.with_index()
+      |> List.foldl(coord2entry, fn {aelem, aindex}, coord2entry ->
+        dist =
+          case {belem, aelem} do
+            {same, same} ->
+              Map.get(coord2entry, {aindex - 1, bindex - 1}).dist
+
+            {_, _} ->
+              1 +
+                Enum.min([
+                  Map.get(coord2entry, {aindex - 1, bindex - 1}).dist,
+                  Map.get(coord2entry, {aindex - 1, bindex}).dist,
+                  Map.get(coord2entry, {aindex, bindex - 1}).dist
+                ])
+          end
+
+        Map.put(coord2entry, {aindex, bindex}, %{x: aindex, y: bindex, dist: dist})
+      end)
+    end)
+  end
+
+  defp calc_cells(coord2entry) do
+    coord2entry
+    |> Enum.map(fn {_, v} -> v end)
+  end
+
+  defp calc_path(_coord2entry, {-1, -1} = p), do: [p]
+  defp calc_path(coord2entry, {-1, n} = p), do: [p | calc_path(coord2entry, {-1, n - 1})]
+  defp calc_path(coord2entry, {n, -1} = p), do: [p | calc_path(coord2entry, {n - 1, -1})]
+
+  defp calc_path(coord2entry, current) do
+    {x, y} = current
+
+    next =
+      [
+        {x - 1, y - 1},
+        {x - 1, y},
+        {x, y - 1}
+      ]
+      |> List.foldl(nil, fn coord, acc ->
+        case {Map.get(coord2entry, acc), Map.get(coord2entry, coord)} do
+          {nil, _candidate} -> coord
+          {old, candidate} when candidate.dist < old.dist -> coord
+          _ -> acc
+        end
+      end)
+
+    [current | calc_path(coord2entry, next)]
+  end
+
+  defp produce_path_code(cells) do
+    code =
+      cells
+      |> Enum.map(fn {x, y} -> "#{@cellw * (x + 2.5)},#{@cellh * (y + 2.5)}" end)
+      |> Enum.join(" ")
+
+    """
+      <polyline points="#{code}" stroke="rgba(0,240,0,0.5)" fill="none" stroke-width="#{@pathw}" stroke-linecap="round" stroke-linejoin="round" />
+    """
+  end
+
+  defp produce_cell_code(cells) do
+    max = cells |> Enum.map(fn cell -> cell.dist end) |> Enum.max()
+
+    cells
+    |> Enum.map(fn cell ->
+      bbox = get_bbox(cell)
+      x = (bbox.west + bbox.east) / 2
+      y = (bbox.north + bbox.south) / 2
+      width = bbox.east - bbox.west
+      height = bbox.south - bbox.north
+      shade = 255 - trunc(cell.dist * 255 / max)
+      fill = "rgb(#{shade},#{shade},#{shade})"
+
+      """
+        <rect x="#{bbox.west}" y="#{bbox.north}" width="#{width}" height="#{height}" fill="#{fill}" />
+        <text x="#{x}" y="#{y}" dominant-baseline="middle" text-anchor="middle" fill="blue">#{cell.dist}</text>
+      """
+    end)
+    |> Enum.join("\n")
+  end
+
+  defp produce_header_code(inputa, inputb) do
+    inputa_code =
+      inputa
+      |> Enum.with_index(fn elem, index ->
+        x = @cellw * (index + 2.5)
+        y = @cellh * (0 + 0.5)
+
+        """
+        <text x="#{x}" y="#{y}" dominant-baseline="middle" text-anchor="middle">#{elem}</text>
+        """
+      end)
+
+    inputb_code =
+      inputb
+      |> Enum.with_index(fn elem, index ->
+        x = @cellw * (0 + 0.5)
+        y = @cellh * (index + 2.5)
+
+        """
+        <text x="#{x}" y="#{y}" dominant-baseline="middle" text-anchor="middle">#{elem}</text>
+        """
+      end)
+
+    (inputa_code ++ inputb_code)
+    |> Enum.join("\n")
+  end
+
+  defp get_bbox(cell) do
+    %{
+      north: @cellh * (cell.y + 2),
+      south: @cellh * (cell.y + 3),
+      west: @cellw * (cell.x + 2),
+      east: @cellw * (cell.x + 3)
+    }
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+svg_code = LevenshteinSpace.illustrate(input1, input2)
+svg = Kino.Image.new(svg_code, :svg)
+
+widget =
+  Kino.Frame.new()
+  |> Kino.render()
+  |> Kino.Frame.render(svg)
+```
