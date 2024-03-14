@@ -40,6 +40,7 @@ Tools:
 - [Timestamp and log lines received over a serial line](uart.livemd)
 - [HTTP server supporting GET requests against root filesystem](http-server.livemd)
 - [Serial terminal](serial-terminal.livemd)
+- [Live processing of serial data](serial-processing.livemd)
 - [CSV to XLSX file conversion](csv2xlsx.livemd)
 
 Useful techniques:
