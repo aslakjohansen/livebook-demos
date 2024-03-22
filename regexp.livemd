@@ -1,0 +1,127 @@
+# Regular Expressions
+
+## Introduction
+
+Regular expressions are implemented in the [Regex](https://hexdocs.pm/elixir/Regex.html) module.
+
+## Syntax
+
+Although there are lower-level options, regular expressions are usually compiled using the `~r` sigil.
+
+```elixir
+hello_pattern = ~r/hello/
+```
+
+The pattern can be made case insensitive by adding an `i` to the end:
+
+```elixir
+insensitive_hello_pattern = ~r/hello/i
+```
+
+The pattern goes in between the two forward slashes. For instance, the following pattern matches most floats:
+
+```elixir
+float_pattern = ~r/(\d*\.\d+|\d+)/
+```
+
+String interpolation is supported for dynamic pattern construction:
+
+```elixir
+city = "Copenhagen"
+country = "Denmark"
+location_pattern = ~r/#{city} is in #{country}/
+```
+
+## Matching
+
+Matching is a boolean operation that evaluates to whether a pattern is present in a string. This is implemented through the [match/2](https://hexdocs.pm/elixir/Regex.html#match?/2) function as well as the `=~` shorthand.
+
+```elixir
+test_suite = [
+  "Hello, world!",
+  "he said hello to the world",
+  "end of days"
+]
+
+contains_hello =
+  test_suite
+  |> Enum.map(fn test ->
+    %{
+      sensitive: test =~ hello_pattern,
+      insensitive: test =~ insensitive_hello_pattern
+    }
+  end)
+```
+
+```elixir
+test_suite = [
+  "0",
+  "3.14",
+  "there were 2 flowers",
+  "regular expression",
+  "2.25 was the price"
+]
+
+contains_float =
+  test_suite
+  |> Enum.map(fn test -> test =~ float_pattern end)
+```
+
+```elixir
+text =
+  "The Danish Queen lives in Copenhagen. Copenhagen is in Denmark. It is a medium-sized capital."
+
+states_origin =
+  text
+  |> String.split(".")
+  |> Enum.any?(fn sentence -> sentence =~ location_pattern end)
+```
+
+## Capturing Anonymous Fields
+
+The matched substring, and all substring matches of parentheses in the pattern represents fields. Given a match, these fields can be extracted as a list (in the order they are present in the pattern):
+
+```elixir
+test_suite = [
+  "a + b",
+  "a * b",
+  " a / b",
+  "a+b"
+]
+
+test_suite
+|> Enum.map(fn test -> Regex.run(~r/([^ ]+) (\+|\-|\*|\/) ([^ ]+)/, test) end)
+```
+
+## Capturing Named Fields
+
+Each field can be named using the `?<name>` syntax. Doing so allows us to bind these names to values at the match site through a map:
+
+```elixir
+test_suite
+|> Enum.map(fn test ->
+  Regex.named_captures(~r/(?<lhs>[^ ]+) (?<op>\+|\-|\*|\/) (?<rhs>[^ ]+)/, test)
+end)
+```
+
+## Replacing Fields
+
+The full match can be replaced by a string that may refer to the fields. This can be done by referring to the field indices:
+
+```elixir
+test_suite
+|> Enum.map(fn test ->
+  Regex.replace(~r/([^ ]+) (\+|\-|\*|\/) ([^ ]+)/, test, "\\3 \\2 \\1")
+end)
+```
+
+But it can also be accomplished through an anonymous function that has access to the fields:
+
+```elixir
+test_suite
+|> Enum.map(fn test ->
+  Regex.replace(~r/([^ ]+) (\+|\-|\*|\/) ([^ ]+)/, test, fn _full, lhs, op, rhs ->
+    "(#{lhs}) #{op} (#{rhs})"
+  end)
+end)
+```
