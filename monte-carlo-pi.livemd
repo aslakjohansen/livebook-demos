@@ -1,0 +1,266 @@
+# Monte Carlo Pi
+
+```elixir
+Mix.install([
+  {:vega_lite, "~> 0.1.6"},
+  {:kino_vega_lite, "~> 0.1.10"}
+])
+```
+
+## Introduction
+
+This notebook uses [Monte Carlo simulation](https://en.wikipedia.org/wiki/Monte_Carlo_algorithm) to approximate π.
+
+By placing 2d points randomly witnin -1 to 1 on each axis and looking at the fraction that land within the unit circle, one can approximate π. The more points, the better the approximation.
+
+Given $A_{sqr}$ being the area of the square and $A_{circ}$ being the area of the unit circle, we have that
+
+$
+\frac{A_{circ}}{A_{sqr}} = \frac{\pi r^2}{4r^2} = \frac{\pi}{4}
+$
+
+or
+
+$
+\pi = 4 \cdot \frac{A_{circ}}{A_{sqr}}
+$
+
+A longer description can be found [here](https://www.geeksforgeeks.org/estimating-value-pi-using-monte-carlo/).
+
+**Note:** The outcome is determined by chance and the quality of the employed random number generator.
+
+## Configuration
+
+```elixir
+step_count = 2_000
+```
+
+## Simulation
+
+Produce coordinates:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+samples =
+  1..step_count
+  |> Enum.map(fn _ -> %{x: 2 * :rand.uniform_real() - 1, y: 2 * :rand.uniform_real() - 1} end)
+```
+
+Map coordinates to whether they are inside of the unit circle:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+outcomes =
+  samples
+  |> Enum.map(fn sample -> :math.sqrt(sample.x * sample.x + sample.y * sample.y) < 1 end)
+```
+
+Calculate the series of approximations:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+approximation =
+  outcomes
+  |> List.foldl([], fn outcome, acc ->
+    {count, inside, outside} =
+      case acc do
+        [last | _] -> {Map.get(last, "count"), Map.get(last, "inside"), Map.get(last, "outside")}
+        _ -> {0, 0, 0}
+      end
+
+    {inside, outside} =
+      case outcome do
+        true -> {inside + 1, outside}
+        false -> {inside, outside + 1}
+      end
+
+    entry = %{
+      "count" => count + 1,
+      "inside" => inside,
+      "outside" => outside,
+      "pi" => inside / (count + 1) * 4,
+      "legend" => "simulated"
+    }
+
+    [entry | acc]
+  end)
+  |> Enum.reverse()
+```
+
+## Result
+
+The final approximation is:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+approximation
+|> Enum.at(-1)
+|> (fn entry -> Map.get(entry, "pi") end).()
+```
+
+## Simulation Set
+
+```elixir
+defmodule Canvas do
+  @dim 320
+  @unit 256
+  @point_r 2
+  @gap 8
+  @gridcolor "#999999"
+
+  def render(samples) do
+    grid_lines = grid()
+    circle_lines = circle()
+    point_lines = point(samples)
+
+    """
+    <svg viewBox="0 0 #{@dim} #{@dim}" xmlns="http://www.w3.org/2000/svg">
+    #{grid_lines}
+    #{circle_lines}
+    #{point_lines}
+    </svg>
+    """
+    |> Kino.Image.new(:svg)
+  end
+
+  defp grid() do
+    dashes = "stroke-dasharray=\"3\""
+
+    """
+    <polygon points="#{@dim / 2 - @unit / 2},#{@dim / 2 - @unit / 2}
+                     #{@dim / 2 - @unit / 2},#{@dim / 2 + @unit / 2}
+                     #{@dim / 2 + @unit / 2},#{@dim / 2 + @unit / 2}
+                     #{@dim / 2 + @unit / 2},#{@dim / 2 - @unit / 2}"
+             fill="none"
+             stroke="#{@gridcolor}"
+             stroke-width="1"
+    />
+
+    <line x1="#{@dim / 2 - @unit / 2}" y1="#{@dim / 2}"
+          x2="#{@dim / 2 + @unit / 2}" y2="#{@dim / 2}"
+          stroke="#{@gridcolor}"
+          stroke-width="1"
+    />
+    <line x1="#{@dim / 2 - @unit / 2}" y1="#{@dim / 2 - @unit / 4}"
+          x2="#{@dim / 2 + @unit / 2}" y2="#{@dim / 2 - @unit / 4}"
+          stroke="#{@gridcolor}"
+          stroke-width="1"
+          #{dashes}
+    />
+    <line x1="#{@dim / 2 - @unit / 2}" y1="#{@dim / 2 + @unit / 4}"
+          x2="#{@dim / 2 + @unit / 2}" y2="#{@dim / 2 + @unit / 4}"
+          stroke="#{@gridcolor}"
+          stroke-width="1"
+          #{dashes}
+    />
+
+    <line x1="#{@dim / 2}" y1="#{@dim / 2 - @unit / 2}"
+          x2="#{@dim / 2}" y2="#{@dim / 2 + @unit / 2}"
+          stroke="#{@gridcolor}"
+          stroke-width="1"
+    />
+    <line x1="#{@dim / 2 - @unit / 4}" y1="#{@dim / 2 - @unit / 2}"
+          x2="#{@dim / 2 - @unit / 4}" y2="#{@dim / 2 + @unit / 2}"
+          stroke="#{@gridcolor}"
+          stroke-width="1"
+          #{dashes}
+    />
+    <line x1="#{@dim / 2 + @unit / 4}" y1="#{@dim / 2 - @unit / 2}"
+          x2="#{@dim / 2 + @unit / 4}" y2="#{@dim / 2 + @unit / 2}"
+          stroke="#{@gridcolor}"
+          stroke-width="1"
+          #{dashes}
+    />
+
+    <text x="#{@dim / 2 - @unit / 2 - @gap}" y="#{@dim / 2 - @unit / 2}" dominant-baseline="middle" text-anchor="end" font-size="small">1.0</text>
+    <text x="#{@dim / 2 - @unit / 2 - @gap}" y="#{@dim / 2 - @unit / 4}" dominant-baseline="middle" text-anchor="end" font-size="small">0.5</text>
+    <text x="#{@dim / 2 - @unit / 2 - @gap}" y="#{@dim / 2}" dominant-baseline="middle" text-anchor="end" font-size="small">0.0</text>
+    <text x="#{@dim / 2 - @unit / 2 - @gap}" y="#{@dim / 2 + @unit / 4}" dominant-baseline="middle" text-anchor="end" font-size="small">-0.5</text>
+    <text x="#{@dim / 2 - @unit / 2 - @gap}" y="#{@dim / 2 + @unit / 2}" dominant-baseline="middle" text-anchor="end" font-size="small">-1.0</text>
+
+    <text x="#{@dim / 2 - @unit / 2}" y="#{@dim / 2 + @unit / 2 + @gap}" dominant-baseline="hanging" text-anchor="middle" font-size="small">-1.0</text>
+    <text x="#{@dim / 2 - @unit / 4}" y="#{@dim / 2 + @unit / 2 + @gap}" dominant-baseline="hanging" text-anchor="middle" font-size="small">-0.5</text>
+    <text x="#{@dim / 2}" y="#{@dim / 2 + @unit / 2 + @gap}" dominant-baseline="hanging" text-anchor="middle" font-size="small">0.0</text>
+    <text x="#{@dim / 2 + @unit / 4}" y="#{@dim / 2 + @unit / 2 + @gap}" dominant-baseline="hanging" text-anchor="middle" font-size="small">0.5</text>
+    <text x="#{@dim / 2 + @unit / 2}" y="#{@dim / 2 + @unit / 2 + @gap}" dominant-baseline="hanging" text-anchor="middle" font-size="small">1.0</text>
+    """
+  end
+
+  defp circle() do
+    """
+    <circle cx="#{@dim / 2}"
+            cy="#{@dim / 2}"
+            r="#{@unit / 2}"
+            stroke="#000000"
+            stroke-width="1"
+            fill="#00000"
+            fill-opacity="0.05"
+    />
+    """
+  end
+
+  defp point(samples) do
+    samples
+    |> Enum.map(fn sample ->
+      color =
+        if :math.sqrt(sample.x * sample.x + sample.y * sample.y) > 1 do
+          "#ff0000"
+        else
+          "#0000ff"
+        end
+
+      """
+      <circle cx="#{@dim / 2 + sample.x * @unit / 2}"
+              cy="#{@dim / 2 + sample.y * @unit / 2}"
+              r="#{@point_r}"
+              fill="#{color}"
+              fill-opacity="0.4"
+      />
+      """
+    end)
+    |> Enum.join("\n")
+  end
+end
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Canvas.render(samples)
+```
+
+## Path of Approximation
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+alias VegaLite, as: Vl
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+correct = [
+  %{"legend" => "correct", "pi" => :math.pi(), "count" => 1},
+  %{"legend" => "correct", "pi" => :math.pi(), "count" => step_count}
+]
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Vl.new(width: 400, height: 300)
+|> Vl.data_from_values(correct ++ approximation)
+|> Vl.mark(:line)
+|> Vl.encode_field(:x, "count", type: :quantitative, title: "Step count")
+|> Vl.encode_field(:y, "pi", type: :quantitative, title: "Value")
+|> Vl.encode_field(:color, "legend", type: :nominal, title: "Legend")
+```
+
+## Final Words
+
+In this example, the full unit square is used as the space the randomly positioned points are placed in. We could have restricted this further to the first quadrant.

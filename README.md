@@ -35,6 +35,7 @@ Classical algorithms:
 - [Dijkstra's algorithm for single-source shortest path](dijkstra-shortest-path.livemd)
 - [Sorting with quicksort and merge sort](sorting.livemd)
 - [Levenshtein distance calculation and pathfinding](levenshtein.livemd)
+- [Monte carlo π approximation](monte-carlo-pi.livemd)
 
 Tools:
 - [Timestamp and log lines received over a socket](socket.livemd)
