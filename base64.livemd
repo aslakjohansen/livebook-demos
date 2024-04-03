@@ -1,0 +1,41 @@
+# Base64 Coding and Decoding
+
+## Introduction
+
+[Base64](https://en.wikipedia.org/wiki/Base64) is a popular binary-to-text encoding scheme, that functions by mapping binary data to a sequence of elements from a set of 64 printable characters. This is useful when one has to transmit binary data across a channel that only reliably support text content. One example could be a URL.
+
+This workbook uses the [Base](https://hexdocs.pm/elixir/Base.html) module, which is part of the standard library and implements support base16 and base32 in addition to base64.
+
+## Test Suite
+
+```elixir
+suite = [
+  "hello, world",
+  "æøåÆØÅ",
+  "[1, 3.14]"
+]
+```
+
+## Encoding
+
+```elixir
+coded =
+  suite
+  |> Enum.map(&Base.encode64/1)
+```
+
+## Decoding
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+decoded =
+  coded
+  |> Enum.map(&Base.decode64!/1)
+```
+
+## Validation
+
+```elixir
+suite == decoded
+```

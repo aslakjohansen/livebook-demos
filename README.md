@@ -16,6 +16,7 @@ Links to [documentation](documentation.livemd).
 - [Doctests](doctests.livemd)
 
 Modules:
+- [Base64](base64.livemd) encoding and decoding with the built-in base module.
 - [JSON](json.livemd) with the jason module.
 - [MQTT](mqtt.livemd) with the tortoise module.
 - [Neo4j](neo4j.livemd) with the bolt_sips module.
