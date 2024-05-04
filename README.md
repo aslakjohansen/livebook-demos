@@ -54,4 +54,5 @@ Useful techniques:
 - [Plotting functions](plotting-functions.livemd)
 - [Python integration](python.livemd)
 - [Working with operating system processes](system.livemd)
+- [Working with flows of data](flows.livemd)
 
