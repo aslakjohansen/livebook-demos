@@ -56,3 +56,6 @@ Useful techniques:
 - [Working with operating system processes](system.livemd)
 - [Working with flows of data](flows.livemd)
 
+Misc demos:
+- [Trigonometric functions](trig.livemd)
+

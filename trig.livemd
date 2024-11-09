@@ -1,0 +1,141 @@
+# Trigonometric Functions
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Introduction
+
+Trigonometric functions are provided by the Erlang [:math](https://www.erlang.org/doc/apps/stdlib/math.html) module. These map between an angle of a right-angled triangle and the ratios of two side lengths. Specifically, in this workbook we explore the [sine](https://www.erlang.org/doc/apps/stdlib/math.html#sin/1) and [cosine](https://www.erlang.org/doc/apps/stdlib/math.html#cos/1) functions. They operate on angles measured in [radians](https://en.wikipedia.org/wiki/Radian). An angle of $360^\circ$ corresponds to $2\cdot \pi$ radians.
+
+References:
+
+* [Working with circle curves in SVG](https://www.mediaevent.de/tutorial/svg-circle-arc.html)
+
+## Visualization
+
+```elixir
+defmodule Visualization do
+  @dim 256
+  @r (@dim*0.7)
+  
+  defp deg2rad(degrees), do: 2*:math.pi*degrees/360
+
+  def produce_coordinate_system() do
+    style = "stroke-width=\"4\" stroke=\"black\" stroke-opacity=\"0.1\""
+    """
+    <line x1="-#{@dim}" y1="0" x2="#{@dim}" y2="0" #{style} />
+    <line x1="0" y1="-#{@dim}" x2="0" y2="#{@dim}" #{style} />
+    """
+  end
+  
+  def produce_unit_circle() do
+    """
+    <circle cx="0" cy="0" r="#{@r}"
+      stroke-width="4" stroke="blue" fill="none" stroke-opacity="0.1" />
+    """
+  end
+  
+  def produce_hand(x, y) do
+    """
+    <line x1="0" y1="0" x2="#{@r*x}" y2="#{@r*y}" stroke-width="2" stroke="orange" />
+    <circle cx="#{@r*x}" cy="#{@r*y}" r="#{6}" fill="orange" />
+    """
+  end
+  
+  def produce_decoration(a, x, y) do
+    {xlabel_offset, xlabel_baseline} =
+      if y<0 do
+        {20, "auto"}
+      else
+        {-20, "hanging"}
+      end
+    {ylabel_offset, ylabel_anchor} =
+      if x<0 do
+        {10, "start"}
+      else
+        {-10, "end"}
+      end
+    deg = a |> :erlang.float_to_binary([decimals: 0])
+    line_props = "stroke-width=\"2\" stroke=\"orange\" stroke-dasharray=\"5,5\""
+    """
+    <line x1="#{@r*x}" y1="0" x2="#{@r*x}" y2="#{@r*y}" #{line_props} />
+    <text x="#{@r*x}" y="#{xlabel_offset}" text-anchor="middle"
+                                           dominant-baseline="#{xlabel_baseline}">
+      cos(#{deg}°) = #{x |> :erlang.float_to_binary([decimals: 2])}
+    </text>
+    
+    <line x1="0" y1="#{@r*y}" x2="#{@r*x}" y2="#{@r*y}" #{line_props} />
+    <text x="#{ylabel_offset}" y="#{@r*y}" text-anchor="#{ylabel_anchor}"
+                                           dominant-baseline="middle">
+      sin(#{deg}°) = #{y |> :erlang.float_to_binary([decimals: 2])}
+    </text>
+    """
+  end
+  
+  def produce_angle(deg, rad) do
+    x = 1.35*@r*0.5*:math.cos(rad/2)
+    y = 1.35*@r*0.5*:math.sin(rad/2) * -1
+    direction = if deg<180 do 0 else 1 end
+    endx = @r*0.5*:math.cos(rad)
+    endy = @r*0.5*:math.sin(rad) * -1
+    """
+    <path
+      d="M 0 0 L #{@r*0.5} 0 A #{@r*0.5} #{@r*0.5} 0 #{direction} 0 #{endx} #{endy} Z"
+      stroke="none" fill="orange" fill-opacity="0.1" />
+    <path
+      d="M #{@r*0.5} 0 A #{@r*0.5} #{@r*0.5} 0 #{direction} 0 #{endx} #{endy}"
+      stroke="orange" fill="none" />
+    <text x="#{x}" y="#{y}" text-anchor="middle" dominant-baseline="middle" fill="orange">
+      α = #{deg |> :erlang.float_to_binary([decimals: 0])}°
+    </text>
+    """
+  end
+  
+  def update_angle(angle, frame) do
+    a = deg2rad(angle)
+    x = :math.cos(a)
+    y = :math.sin(a) * -1
+
+    coordinate_lines = produce_coordinate_system()
+    circle_lines = produce_unit_circle()
+    hand_lines = produce_hand(x, y)
+    decoration_lines = produce_decoration(angle, x, y)
+    angle_lines = produce_angle(angle, a)
+
+    svg_kino =
+      """
+      <svg viewBox="-#{@dim} -#{@dim} #{2*@dim} #{2*@dim}" xmlns="http://www.w3.org/2000/svg">
+        #{circle_lines}
+        #{hand_lines}
+        #{decoration_lines}
+        #{coordinate_lines}
+        #{angle_lines}
+      </svg>
+      """
+      |> Kino.Image.new(:svg)
+    Kino.Frame.render(frame, svg_kino)
+  end
+end
+```
+
+## Interface
+
+```elixir
+kino = Kino.Input.range("Pick an angle:", min: 0, max: 360, default: 34, debounce: 1)
+```
+
+```elixir
+frame = Kino.Frame.new() |> Kino.render()
+nil
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+Kino.listen(kino, fn event ->
+  Visualization.update_angle(event.value, frame)
+end)
+```
