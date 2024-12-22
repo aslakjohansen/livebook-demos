@@ -1,0 +1,165 @@
+# Analog Clock
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"}
+])
+```
+
+## Introduction
+
+The implementation of this clock is split into two components. Once a second, a `Ticker` genserver sends a timestamp to a `ClockFace` genserver which then updates a Kino frame using an SVG diagram.
+
+<!-- livebook:{"break_markdown":true} -->
+
+```mermaid
+graph LR;
+  Ticker-->ClockFace-->Frame;
+```
+
+<!-- livebook:{"break_markdown":true} -->
+
+**Note:** This clock shows time in GMT (or whatever the system clock is configured to). It does not properly deal with timezones and daylight saving.
+
+## Clock Face
+
+```elixir
+defmodule ClockFace do
+  use GenServer
+
+  @clock_size 600
+
+  # (client) interface
+
+  def start_link(frame) do
+    GenServer.start_link(__MODULE__, frame)
+  end
+  
+  def start(frame) do
+    GenServer.start(__MODULE__, frame)
+  end
+
+  def set(server, value) do
+    GenServer.cast(server, {:set, value})
+  end
+  
+  # callbacks
+
+  @impl true
+  def init(state) do
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_cast({:set, timestamp}, frame = state) do
+    sec  = timestamp |> rem(60)
+    min  = timestamp |> div(60) |> rem(60)
+    hour = timestamp |> div(60*60) |> rem(24)
+    
+    svg =
+      {sec, min, hour}
+      |> draw()
+      |> Kino.Image.new(:svg)
+    Kino.Frame.render(frame, svg)
+    
+    {:noreply, state}
+  end
+
+  # helpers
+
+  defp draw({sec, min, hour}) do
+    """
+    <svg viewBox="0 0 #{@clock_size} #{@clock_size}" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="#{@clock_size/2}" cy="#{@clock_size/2}"
+              r="#{@clock_size/2-5}"
+              fill="none" stroke-width="#{6}" stroke="black" />
+      #{draw_hand(hour, :hours)}
+      #{draw_hand(min, :minutes)}
+      #{draw_hand(sec, :seconds)}
+    </svg>
+    """
+  end
+
+  defp draw_hand(index, type) do
+    %{range: range, width: width, length: length, color: color} =
+      case type do
+        :seconds -> %{range: 60, width: 2, length: 0.8, color: "red"}
+        :minutes -> %{range: 60, width: 6, length: 0.7, color: "black"}
+        :hours   -> %{range: 12, width: 10, length: 0.5, color: "black"}
+      end
+
+    sx = @clock_size/2
+    sy = @clock_size/2
+    dx = sx + length*@clock_size/2*:math.cos(-:math.pi/2+2*:math.pi/range*index)
+    dy = sy + length*@clock_size/2*:math.sin(-:math.pi/2+2*:math.pi/range*index)
+    
+    """
+    <line x1="#{sx}" y1="#{sy}" x2="#{dx}" y2="#{dy}"
+          stroke-width="#{width}" stroke-linecap="round"
+          stroke="#{color}" />
+    <circle cx="#{sx}" cy="#{sx}" r="#{1.4*width}" fill="#{color}" />
+    """
+  end
+end
+```
+
+## Ticker
+
+```elixir
+defmodule Ticker do
+  use GenServer
+
+  # (client) interface
+
+  def start_link(clock_pid, interval) do
+    GenServer.start_link(__MODULE__, {clock_pid, interval})
+  end
+
+  def start(clock_pid, interval) do
+    GenServer.start(__MODULE__, {clock_pid, interval})
+  end
+
+  # callbacks
+
+  @impl true
+  def init(state) do
+    tick(state)
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_cast({:tick}, state) do
+    tick(state)
+    {:noreply, state}
+  end
+
+  # helpers
+
+  defp tick({clock_pid, interval}) do
+    GenServer.cast(self(), {:tick})
+    ClockFace.set(clock_pid, System.os_time(:second))
+    :timer.sleep(interval)
+  end
+end
+```
+
+## Application Code
+
+Define a frame:
+
+```elixir
+frame = Kino.Frame.new() |> Kino.render()
+nil
+```
+
+Start the clockface process:
+
+```elixir
+{:ok, clockface_pid} = ClockFace.start(frame)
+```
+
+Start the ticker process:
+
+```elixir
+{:ok, ticker_pid} = Ticker.start(clockface_pid, 1000)
+```

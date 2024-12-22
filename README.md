@@ -58,4 +58,5 @@ Useful techniques:
 
 Misc demos:
 - [Trigonometric functions](trig.livemd)
+- [Analog clock](analog-clock.livemd)
 
