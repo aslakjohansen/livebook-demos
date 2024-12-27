@@ -49,6 +49,7 @@ Tools:
 Useful techniques:
 - [Index through repository readme](index.livemd)
 - [Filesystem](filesystem.livemd)
+- [Load balancing](load-balancing.livemd)
 - [Dynamic graphics (both vector and bitmapped)](dynamic-graphics.livemd)
 - [Persistent embedded key-value store with CubDB](cubdb.livemd)
 - [Plotting functions](plotting-functions.livemd)
