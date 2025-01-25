@@ -2,9 +2,9 @@
 
 ```elixir
 Mix.install([
-  {:bolt_sips, "~> 2.0"},
+  {:boltx, "~> 0.0.6"},
   {:sparql, "~> 0.3"},
-  {:kino, "~> 0.10.0"}
+  {:kino, "~> 0.10.0"},
 ])
 ```
 
@@ -12,13 +12,13 @@ Mix.install([
 
 To get started, create the following docker compose file:
 
-```yaml
+```
 version: '3'
 services:
   neo4j:
     environment:
       - NEO4J_AUTH=neo4j/neo4jtest
-    image: neo4j:4.4.27
+    image: neo4j:5.26.1
     ports:
       - '7474:7474'
       - '7473:7473'
@@ -27,11 +27,13 @@ services:
       - /vol/neo4j:/data
 ```
 
-Assuming that you have named the file `neo4j-docker-compose.yml`, then run:
+Assuming that you have named the file `neo4j-docker-compose.yml` and have docker compose [installed](https://docs.docker.com/engine/install/), then run:
 
 ```shell
-docker-compose -f neo4j-docker-compose.yml up
+docker compose -f neo4j-docker-compose.yml up
 ```
+
+**Note:** If you have an old version installed, then you may have to run `docker-compose ...` instead of `docker compose ...`. As the interface is in flux, you might also encounter some warnings.
 
 This should make the Neo4j [web interface](http://localhost:7474) available and allow you to run this livebook.
 
@@ -96,28 +98,26 @@ type2modality = %{
 Establish connection:
 
 ```elixir
-{:ok, neo} = Bolt.Sips.start_link(url: "bolt://neo4j:neo4jtest@127.0.0.1:7687")
-```
+opts = [
+  hostname: "127.0.0.1",
+  scheme: "bolt",
+  port: 7687,
+  auth: [username: "neo4j", password: "neo4jtest"],
+  pool_size: 15,
+]
 
-```elixir
-Process.info(neo)
-```
-
-Get a connection (this is the handle through which we communicate):
-
-```elixir
-conn = Bolt.Sips.conn()
+{:ok, conn} = Boltx.start_link(opts)
 ```
 
 Test ping:
 
 ```elixir
-Bolt.Sips.query!(conn, "RETURN 1 as n")
+Boltx.query!(conn, "RETURN 1 as n") |> Boltx.Response.first()
 ```
 
 ## Model Construction
 
-Clean slate:
+Establish clean slate:
 
 ```elixir
 queries = [
@@ -125,10 +125,10 @@ queries = [
   "MATCH (n) DELETE n"
 ]
 
-Enum.map(queries, fn query -> Bolt.Sips.query!(conn, query) end)
+Enum.map(queries, fn query -> Boltx.query!(conn, query) end)
 ```
 
-### Type Tree
+### Create Type Tree
 
 ```elixir
 typetree = {
@@ -210,7 +210,7 @@ defmodule TypeTree do
           "MATCH (parent:Type {name: '#{parent}'}) MERGE (:Type {name: '#{name}'})-[:subtypeof]->(parent)"
       end
 
-    Bolt.Sips.query!(conn, query)
+    Boltx.query!(conn, query)
     :ok
   end
 end
@@ -220,7 +220,7 @@ end
 TypeTree.establish(typetree, conn)
 ```
 
-### Floors
+### Create Floors
 
 ```elixir
 floors = [
@@ -232,11 +232,11 @@ floors = [
 floors
 |> Enum.map(fn floor ->
   query = "MATCH (t:Type {name: 'Floor'}) CREATE (:Floor {name: '#{floor}'})-[:type]->(t)"
-  Bolt.Sips.query!(conn, query)
+  Boltx.query!(conn, query)
 end)
 ```
 
-### Rooms
+### Create Rooms
 
 ```elixir
 rooms = [
@@ -255,15 +255,15 @@ rooms
     MERGE (f)-[:contains]->(r)
   """
 
-  Bolt.Sips.query!(conn, query)
+  Boltx.query!(conn, query)
 end)
 ```
 
 ```elixir
-Bolt.Sips.query!(conn, "MATCH (a:Room), (b:Room) WHERE a<>b CREATE (a)-[:adjacent]->(b)")
+Boltx.query!(conn, "MATCH (a:Room), (b:Room) WHERE a<>b CREATE (a)-[:adjacent]->(b)")
 ```
 
-### Sensors
+### Create Sensors
 
 ```elixir
 sensors = [
@@ -295,7 +295,7 @@ sensors
     CREATE (r)-[:modality]->(modality)
   """
 
-  Bolt.Sips.query!(conn, query)
+  Boltx.query!(conn, query)
 end)
 ```
 
@@ -304,7 +304,7 @@ end)
 Room sizes:
 
 ```elixir
-Bolt.Sips.query!(conn, "MATCH (room:Room) RETURN room.area AS area")
+Boltx.query!(conn, "MATCH (room:Room) RETURN room.area AS area")
 |> result_as_table.()
 ```
 
@@ -325,15 +325,15 @@ RETURN
 """
 
 response =
-  Bolt.Sips.query!(conn, q)
+  Boltx.query!(conn, q)
   |> result_as_table.()
 ```
 
-### Type Tree
+Type tree:
 
 ```elixir
 response =
-  Bolt.Sips.query!(conn, "MATCH (t:Type)-[:subtypeof]->(parent:Type) RETURN t.name, parent.name")
+  Boltx.query!(conn, "MATCH (t:Type)-[:subtypeof]->(parent:Type) RETURN t.name, parent.name")
 
 response.results
 |> Enum.map(fn %{"t.name" => name, "parent.name" => parent} -> {name, parent} end)
@@ -342,9 +342,4 @@ response.results
 
 ## Final Words
 
-The driver used here, [bolt_sips](https://github.com/florinpatrascu/bolt_sips), has some noteworthy shortcomings. Notable examples:
-
-* The inability to connect to multiple Neo4J instances.
-* The lack of support for Neo4j version 5+.
-
-These seem to be remedied by the [boltx](https://github.com/sagastume/boltx) driver (which is still under construction).
+The [boltx](https://github.com/sagastume/boltx) package, used here, implements several versions of the bolt protocol needed to communicate with Neo4j. Breaking changes were introduced to this protocol in version 5. So, there might still be a few minor issues left.
