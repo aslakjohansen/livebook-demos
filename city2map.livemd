@@ -108,5 +108,5 @@ Ml.new()
   type: :circle,
   paint: [circle_color: "brown", circle_opacity: 0.8, circle_radius: 8]
 )
-|> Kino.MapLibre.info_on_click("earthquakes", "place")
+|> Kino.MapLibre.info_on_click("locations", "place")
 ```
