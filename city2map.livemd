@@ -53,8 +53,7 @@ matches =
   |> (fn city ->
     %HTTPoison.Response{status_code: 200, body: body} =
       HTTPoison.get!("https://nominatim.openstreetmap.org/search?q=#{city}&format=json")
-    {:ok, matches} =
-      Jason.decode(body)
+    {:ok, matches} = Jason.decode(body)
     matches
     |> Enum.map(fn match ->
       %{"lat" => lat, "lon" => long, "display_name" => dname} = match
@@ -68,10 +67,7 @@ Allow the user to pick any match:
 <!-- livebook:{"reevaluate_automatically":true} -->
 
 ```elixir
-options =
-  matches
-  |> Enum.with_index(fn {_, _, name}, i -> {i, name} end)
-  
+options = matches |> Enum.with_index(fn {_, _, name}, i -> {i, name} end)
 kinos = [
   Kino.Input.select("Pick match:", options)
 ]
@@ -85,8 +81,7 @@ layout = Kino.Layout.grid(kinos)
   kinos
   |> Enum.at(0)
   |> Kino.Input.read()
-  |> (fn index ->matches |> Enum.at(index)
-    end).()
+  |> (fn index ->matches |> Enum.at(index) end).()
 ```
 
 ## Display
