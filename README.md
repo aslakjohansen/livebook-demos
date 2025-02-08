@@ -39,6 +39,7 @@ Classical algorithms:
 - [Monte carlo π approximation](monte-carlo-pi.livemd)
 
 Tools:
+- [Given a name, plot a city on a map](city2map.livemd)
 - [Timestamp and log lines received over a socket](socket.livemd)
 - [Timestamp and log lines received over a serial line](uart.livemd)
 - [HTTP server supporting GET requests against root filesystem](http-server.livemd)

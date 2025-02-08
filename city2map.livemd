@@ -1,0 +1,117 @@
+# City to Map
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.14.2"},
+  {:kino_maplibre, "~> 0.1.12"},
+  {:httpoison, "~> 2.2"},
+  {:jason, "~> 1.4"}
+])
+```
+
+## Introduction
+
+The notebook allows the user to enter any location and have it plotted on a world map. The locations of all matches on [nominatim.openstreetmap.org](https://nominatim.openstreetmap.org) are then fetched and the user picks one based on the openstreetmap display name.
+
+<!-- livebook:{"break_markdown":true} -->
+
+This is accomplished throw the use of:
+
+* [Kino](https://hexdocs.pm/kino/Kino.html) A package for adding interactive components to notebooks.
+* [HTTPoison](https://hexdocs.pm/httpoison/HTTPoison.html) A package for performing REST calls.
+* [Jason](https://hexdocs.pm/jason/Jason.html) A package for JSON marchalling and unmarshalling.
+* [MapLibra](https://hexdocs.pm/maplibre/MapLibre.html) A package for displaying maps in Livebook.
+
+## Convenience
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+alias MapLibre, as: Ml
+```
+
+## Input
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+kinos = [
+  Kino.Input.text("Enter city name:", default: "Berkeley")
+]
+layout = Kino.Layout.grid(kinos)
+```
+
+Fetch latitude and longitude of all matches:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+matches =
+  kinos
+  |> Enum.at(0)
+  |> Kino.Input.read()
+  |> (fn city ->
+    %HTTPoison.Response{status_code: 200, body: body} =
+      HTTPoison.get!("https://nominatim.openstreetmap.org/search?q=#{city}&format=json")
+    {:ok, matches} =
+      Jason.decode(body)
+    matches
+    |> Enum.map(fn match ->
+      %{"lat" => lat, "lon" => long, "display_name" => dname} = match
+      {String.to_float(lat), String.to_float(long), dname}
+      end)
+    end).()
+```
+
+Allow the user to pick any match:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+options =
+  matches
+  |> Enum.with_index(fn {_, _, name}, i -> {i, name} end)
+  
+kinos = [
+  Kino.Input.select("Pick match:", options)
+]
+layout = Kino.Layout.grid(kinos)
+```
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+{lat, long, dname} =
+  kinos
+  |> Enum.at(0)
+  |> Kino.Input.read()
+  |> (fn index ->matches |> Enum.at(index)
+    end).()
+```
+
+## Display
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+locations = %{
+  "lat" => [lat],
+  "long" => [long],
+  "place" => [dname]
+}
+
+Ml.new()
+|> Ml.add_table_source(
+  "locations",
+  locations,
+  {:lat_lng, ["lat", "long"]},
+  properties: ["place"]
+)
+|> Ml.add_layer(
+  id: "locations",
+  source: "locations",
+  type: :circle,
+  paint: [circle_color: "brown", circle_opacity: 0.8, circle_radius: 8]
+)
+|> Kino.MapLibre.info_on_click("earthquakes", "place")
+```
