@@ -83,7 +83,7 @@ Vocabulary:
 defmodule Schema do
   use RDF.Vocabulary.Namespace
 
-  @base "http://sdu.dk/ss/courses/iot/2024/schemas/"
+  @base "https://github.com/aslakjohansen/livebook-demos/blob/main/rdf.livemd/2024/schemas/"
 
   defvocab(Data,
     base_iri: "#{@base}data#",
@@ -109,6 +109,8 @@ defmodule Schema do
     base_iri: "#{@base}point#",
     terms: ~w[Point Sensor PIR TemperatureSensor HumiditySensor]
   )
+
+  def base(), do: @base
 end
 ```
 
@@ -173,7 +175,8 @@ schema = [
 ## Model
 
 ```elixir
-model = "http://www.sdu.dk#"
+premodel = "https://github.com/aslakjohansen/livebook-demos/blob/main/rdf.livemd"
+model = "#{premodel}#"
 
 # namespaces to bind
 ns = [
@@ -196,29 +199,29 @@ Instances:
 Variables for relevant entities:
 
 ```elixir
-floor = ~I"http://www.sdu.dk#floor3"
-roomA = ~I"http://www.sdu.dk#roomA"
-roomAocc = ~I"http://www.sdu.dk#roomA/occ"
-roomApir = ~I"http://www.sdu.dk#roomA/pir"
-roomApirData = ~I"http://www.sdu.dk#roomA/pir/data"
-roomAtemp = ~I"http://www.sdu.dk#roomA/temp"
-roomAtempData = ~I"http://www.sdu.dk#roomA/temp/data"
-roomAtc = ~I"http://www.sdu.dk#roomA/tc"
-roomAtcData = ~I"http://www.sdu.dk#roomA/tc/data"
-roomArhum = ~I"http://www.sdu.dk#roomA/rhum"
-roomAhum = ~I"http://www.sdu.dk#roomA/hum"
-roomAhumData = ~I"http://www.sdu.dk#roomA/hum/data"
-roomB = ~I"http://www.sdu.dk#roomB"
-roomBocc = ~I"http://www.sdu.dk#roomB/occ"
-roomBpir = ~I"http://www.sdu.dk#roomB/pir"
-roomBpirData = ~I"http://www.sdu.dk#roomB/pir/data"
-roomBtemp = ~I"http://www.sdu.dk#roomB/temp"
-roomBtempData = ~I"http://www.sdu.dk#roomA/temp/data"
-roomBtc = ~I"http://www.sdu.dk#roomB/tc"
-roomBtcData = ~I"http://www.sdu.dk#roomB/tc/data"
-roomBrhum = ~I"http://www.sdu.dk#roomB/rhum"
-roomBhum = ~I"http://www.sdu.dk#roomB/hum"
-roomBhumData = ~I"http://www.sdu.dk#roomB/hum/data"
+floor = ~i"#{model}floor3"
+roomA = ~i"#{model}roomA"
+roomAocc = ~i"#{model}roomA/occ"
+roomApir = ~i"#{model}roomA/pir"
+roomApirData = ~i"#{model}roomA/pir/data"
+roomAtemp = ~i"#{model}roomA/temp"
+roomAtempData = ~i"#{model}roomA/temp/data"
+roomAtc = ~i"#{model}roomA/tc"
+roomAtcData = ~i"#{model}roomA/tc/data"
+roomArhum = ~i"#{model}roomA/rhum"
+roomAhum = ~i"#{model}roomA/hum"
+roomAhumData = ~i"#{model}roomA/hum/data"
+roomB = ~i"#{model}roomB"
+roomBocc = ~i"#{model}roomB/occ"
+roomBpir = ~i"#{model}roomB/pir"
+roomBpirData = ~i"#{model}roomB/pir/data"
+roomBtemp = ~i"#{model}roomB/temp"
+roomBtempData = ~i"#{model}roomA/temp/data"
+roomBtc = ~i"#{model}roomB/tc"
+roomBtcData = ~i"#{model}roomB/tc/data"
+roomBrhum = ~i"#{model}roomB/rhum"
+roomBhum = ~i"#{model}roomB/hum"
+roomBhumData = ~i"#{model}roomB/hum/data"
 ```
 
 Add relationships:
@@ -342,13 +345,19 @@ model |> RDF.Turtle.write_string!() |> IO.puts()
 
 ## Queries
 
+Fetch the proper base IRI of the schema location:
+
+```elixir
+base = Schema.base()
+```
+
 Room sizes:
 
 <!-- livebook:{"reevaluate_automatically":true} -->
 
 ```elixir
 q = "
-  PREFIX location: <http://sdu.dk/ss/courses/iot/2024/schemas/location#>
+  PREFIX location: <#{base}location#>
   
   SELECT ?area
   WHERE {
@@ -367,8 +376,8 @@ Per-floor combinations of temperature and relative humidity data:
 
 ```elixir
 q = "
-  PREFIX location: <http://sdu.dk/ss/courses/iot/2024/schemas/location#>
-  PREFIX modality: <http://sdu.dk/ss/courses/iot/2024/schemas/modality#>
+  PREFIX location: <#{base}location#>
+  PREFIX modality: <#{base}modality#>
   
   SELECT ?name ?temp ?rhum
   WHERE {
