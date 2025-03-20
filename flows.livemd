@@ -70,7 +70,7 @@ What's going one here?
 
 While this solution is fine for a small file, it has a number of downsides, namely:
 
-* **Memory consumption:** It loads the entire file into memory. That may be fine for a 10kB file, but wouldf likely be problematic for a 10GB file.
+* **Memory consumption:** It loads the entire file into memory. That may be fine for a 10kB file, but would likely be problematic for a 10GB file.
 * **Memory access:** It does four passes over the data of the file; first for reading, then for splitting into lines, then for splitting into words and finally for reducing into the map.
 
 This is the result of eager processing.
