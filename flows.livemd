@@ -94,7 +94,7 @@ What's going on here?
 
 <!-- livebook:{"break_markdown":true} -->
 
-`Enum.reduce` will consume values (i.e., words), one at a time, produced by the recipe passed to it. In order to produce a value the recipe will follow the recipe passed to it. This way, recipes are chained, and the call follows this chain for each value produced.
+`Enum.reduce` will consume values (i.e., words), one at a time, as produced by the recipe passed to it. In order to produce a value the recipe will follow the recipe passed to it. This way, recipes are chained, and the call follows this chain for each value produced.
 
 Let's try to illustrate this:
 
@@ -141,7 +141,7 @@ What's going on here?
 * The `Flow.from_enumerate` line freates a new flow from an enumerable. It will consume batches of elements from the previous line when it receives demand. `File.stream!`, by default, will send it one element per line it encounters.
 * The `Flow.flat_map` line is exactly the same as in the lazy version, only it produces a flow that can be evaluated concurrently.
 * The `Flow.partition` line will partition the data according to a keying function whose keys will be hashed to the number of stages in the next step of the flow. Partitioning allows you to control which classes of inputs are routed to the same stages of the next step. This is critical for some problems and a waste of resources for others.
-* The `Flow.reduce` line is exactly the same as in the lazy vesion, only it produces a flow and, given that it is positioned after the partioning, specific words will alway be mapped to a specific stage of those that make up this step of the flow. This means that we are guaranteed to not have any key that appears in two stages.
+* The `Flow.reduce` line is exactly the same as in the lazy vesion, only it produces a flow and, given that it is positioned after the partioning, specific words will always be mapped to a specific stage of those that make up this step of the flow. This means that we are guaranteed to not have any key that appears in two stages.
 * The `Enum.into` line eagerly constructs a map from the flow. This is what drives the demand.
 
 <!-- livebook:{"break_markdown":true} -->
