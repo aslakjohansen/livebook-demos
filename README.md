@@ -46,6 +46,7 @@ Tools:
 - [Serial terminal](serial-terminal.livemd)
 - [Live processing of serial data](serial-processing.livemd)
 - [CSV to XLSX file conversion](csv2xlsx.livemd)
+- [Triadic color generator](triadic-colors.livemd)
 
 Useful techniques:
 - [Index through repository readme](index.livemd)

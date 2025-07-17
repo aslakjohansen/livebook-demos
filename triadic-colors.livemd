@@ -1,0 +1,204 @@
+# Triadic Color Generator
+
+```elixir
+Mix.install([
+  {:kino, "~> 0.16.0"},
+  {:chameleon, "~> 2.5"}
+])
+```
+
+## Introduction
+
+A [color triad](https://en.wikipedia.org/wiki/Color_scheme#Triadic) consists of three colors that are evenly spaced around the [hue](https://en.wikipedia.org/wiki/Hue) circle. They usually appear quite pleasing.
+
+This workbook implements a variant whereby two colors are given and a third one is produced to lie equally far on the hue cirle from the two input colors. Because two such colors exist, this workbook will produce both.
+
+**Note:** Let it be known that [arcs in SVG](https://developer.mozilla.org/en-US/docs/Web/SVG/Tutorials/SVG_from_scratch/Paths#arcs) takes some getting used to, especially when combined with gradients.
+
+## Support Code
+
+```elixir
+defmodule Canvas do
+  @dim 320
+  
+  use GenServer
+  
+  # interface
+  
+  def start(frame) do
+    GenServer.start(__MODULE__, frame, name: __MODULE__)
+  end
+  
+  def update(color1, color2) do
+    GenServer.cast(__MODULE__, {:update, color1, color2})
+  end
+  
+  # callbacks
+
+  @impl true
+  def init(state) do
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_cast({:update, color1, color2}, frame = state) do
+    Kino.Frame.clear(frame)
+    Kino.Frame.render(frame, [color1, color2])
+    Kino.Frame.render(frame, render(color1, color2))
+    {:noreply, state}
+  end
+
+  # helpers
+
+  def render_color(color) do
+    %Chameleon.HSV{h: h} = Chameleon.convert(color, Chameleon.HSV)
+    {x, y} = gen_coords_for_angle(h)
+    """
+    <circle cx="#{x}" cy="#{y}" r="10" fill="#{color}" stroke="#000000" />
+    """
+  end
+
+  def render_color_info(color, offset) do
+    %Chameleon.HSV{h: h, s: s, v: v} = Chameleon.convert(color, Chameleon.HSV)
+    %Chameleon.RGB{r: r, g: g, b: b} = Chameleon.convert(color, Chameleon.RGB)
+    """
+    <text x="#{@dim/2}"
+          y="#{@dim/2+(offset-1.5)*16}"
+          fill="black"
+          text-anchor="middle" dominant-baseline="central"
+          font-size="8pt">
+      <tspan font-weight="bold">hex:</tspan>#{color}
+      <tspan font-weight="bold">rgb:</tspan>(#{r},#{g},#{b})
+      <tspan font-weight="bold">hsv:</tspan>(#{h},#{s},#{v})
+    </text>
+    """
+  end
+  
+  def find_third_color(color1, color2, rotate\\0) do
+    %Chameleon.HSV{h: h1, s: s1, v: v1} = Chameleon.convert(color1, Chameleon.HSV)
+    %Chameleon.HSV{h: h2, s: s2, v: v2} = Chameleon.convert(color2, Chameleon.HSV)
+
+    h = rem(h1 + div(h2-h1,2) + rotate, 360)
+    s = s1 + (s2-s1)/2
+    v = v1 + (v2-v1)/2
+
+    %Chameleon.Hex{hex: hex}   = Chameleon.HSV.new(h, s, v) |> Chameleon.convert(Chameleon.Hex)
+    "##{hex}"
+  end
+  
+  def render(color1, color2) do
+    color3 = find_third_color(color1, color2)
+    color4 = find_third_color(color1, color2, 180)
+    
+    %Chameleon.Hex{hex: c0}   = Chameleon.HSV.new(  0, 100, 100) |> Chameleon.convert(Chameleon.Hex)
+    %Chameleon.Hex{hex: c60}  = Chameleon.HSV.new( 60, 100, 100) |> Chameleon.convert(Chameleon.Hex)
+    %Chameleon.Hex{hex: c120} = Chameleon.HSV.new(120, 100, 100) |> Chameleon.convert(Chameleon.Hex)
+    %Chameleon.Hex{hex: c180} = Chameleon.HSV.new(180, 100, 100) |> Chameleon.convert(Chameleon.Hex)
+    %Chameleon.Hex{hex: c240} = Chameleon.HSV.new(240, 100, 100) |> Chameleon.convert(Chameleon.Hex)
+    %Chameleon.Hex{hex: c300} = Chameleon.HSV.new(300, 100, 100) |> Chameleon.convert(Chameleon.Hex)
+    %Chameleon.Hex{hex: c360} = Chameleon.HSV.new(  0, 100, 100) |> Chameleon.convert(Chameleon.Hex)
+
+    r = 0.4*@dim
+    {x0, y0}     = gen_coords_for_angle(0)
+    {x60, y60}   = gen_coords_for_angle(60)
+    {x120, y120} = gen_coords_for_angle(120)
+    {x180, y180} = gen_coords_for_angle(180)
+    {x240, y240} = gen_coords_for_angle(240)
+    {x300, y300} = gen_coords_for_angle(300)
+    {x360, y360} = gen_coords_for_angle(360)
+    
+    """
+    <svg viewBox="0 0 #{@dim} #{@dim}" xmlns="http://www.w3.org/2000/svg">
+      <!-- first half of the gradients are in reverse direction -->
+      <linearGradient id="grad0-60">
+         <stop offset="0%" stop-color="##{c60}"></stop>
+         <stop offset="100%" stop-color="##{c0}"></stop>
+      </linearGradient>
+      <linearGradient id="grad60-120">
+         <stop offset="0%" stop-color="##{c120}"></stop>
+         <stop offset="100%" stop-color="##{c60}"></stop>
+      </linearGradient>
+      <linearGradient id="grad120-180">
+         <stop offset="0%" stop-color="##{c180}"></stop>
+         <stop offset="100%" stop-color="##{c120}"></stop>
+      </linearGradient>
+    
+      <!-- second half of the gradients are in normal direction -->
+      <linearGradient id="grad180-240">
+         <stop offset="0%" stop-color="##{c180}"></stop>
+         <stop offset="100%" stop-color="##{c240}"></stop>
+      </linearGradient>
+      <linearGradient id="grad240-300">
+         <stop offset="0%" stop-color="##{c240}"></stop>
+         <stop offset="100%" stop-color="##{c300}"></stop>
+      </linearGradient>
+      <linearGradient id="grad300-360">
+         <stop offset="0%" stop-color="##{c300}"></stop>
+         <stop offset="100%" stop-color="##{c360}"></stop>
+      </linearGradient>
+
+      <path d="M #{x0} #{y0} A #{r} #{r} 0 0 1 #{x60} #{y60}"
+        fill="none" stroke="url(#grad0-60)" stroke-width="5" />
+      <path d="M #{x60} #{y60} A #{r} #{r} 0 0 1 #{x120} #{y120}"
+        fill="none" stroke="url(#grad60-120)" stroke-width="5" />
+      <path d="M #{x120} #{y120} A #{r} #{r} 0 0 1 #{x180} #{y180}"
+        fill="none" stroke="url(#grad120-180)" stroke-width="5" />
+      <path d="M #{x180} #{y180} A #{r} #{r} 0 0 1 #{x240} #{y240}"
+        fill="none" stroke="url(#grad180-240)" stroke-width="5" />
+      <path d="M #{x240} #{y240} A #{r} #{r} 0 0 1 #{x300} #{y300}"
+        fill="none" stroke="url(#grad240-300)" stroke-width="5" />
+      <path d="M #{x300} #{y300} A #{r} #{r} 0 0 1 #{x360} #{y360}"
+        fill="none" stroke="url(#grad300-360)" stroke-width="5" />
+      
+      #{render_color(color1)}
+      #{render_color(color2)}
+      #{render_color(color3)}
+      #{render_color(color4)}
+      
+      #{render_color_info(color1, 0)}
+      #{render_color_info(color2, 1)}
+      #{render_color_info(color3, 2)}
+      #{render_color_info(color4, 3)}
+    </svg>
+    """
+    |> Kino.Image.new(:svg)
+  end
+
+  def gen_coords_for_angle(angle) do
+    {
+      @dim/2+0.4*@dim*:math.cos(angle/360*2*:math.pi),
+      @dim/2+0.4*@dim*:math.sin(angle/360*2*:math.pi)
+    }
+  end
+end
+```
+
+## Interface
+
+```elixir
+elements = [
+  color1: Kino.Input.color("Color 1:", default: "#008080"),
+  color2: Kino.Input.color("Color 2:", default: "#800080")
+]
+
+form = Kino.Control.form(elements, submit: "Send", report_changes: true)
+```
+
+```elixir
+frame = Kino.Frame.new()
+```
+
+```elixir
+canvas_pid =
+  case Canvas.start(frame) do
+    {:ok, pid} -> pid
+    {:error, {:already_started, pid}} -> pid
+  end
+```
+
+```elixir
+for event <- Kino.Control.stream(form) do
+  %{data: %{color1: color1, color2: color2}, type: _type, origin: _origin} = event
+  Canvas.update(color1, color2)
+end
+```
