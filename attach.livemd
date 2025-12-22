@@ -1,0 +1,67 @@
+# Attaching to Another Node
+
+## Introduction
+
+In this notebook we connect to another BEAM node, spawn a process on it, and communicate with this process.
+
+<!-- livebook:{"break_markdown":true} -->
+
+Before we begin, we need to start a BEAM node somewhere else. This can be done by starting an `iex` session:
+
+```
+iex --name test@127.0.0.1 --cookie mycookie
+```
+
+## Configuration
+
+```elixir
+node = :"test@127.0.0.1"
+cookie = :mycookie
+```
+
+## Connect
+
+```elixir
+Node.set_cookie(node, cookie)
+Node.connect(node)
+```
+
+List connected nodes (some are hidden by default):
+
+```elixir
+Node.list(:connected)
+```
+
+## Start Remote Process
+
+The following code spawns a new process on `node`. This process blocks until it has received a message patching the `{:ping, org_pid}` pattern. When that happens, a response is sent back that contains the remote node identity and the remote process pid.
+
+```elixir
+pid = Node.spawn_link(node, fn ->
+  receive do
+    {:ping, org_pid} -> send(org_pid, {:pong, Node.self(), self()})
+  end
+  end)
+```
+
+**Note:** The first component of the `pid` looks different from the usual 0. This is a numerical node id. A non-zero node id means that the process is hosted remotely.
+
+## Communicate
+
+Send message to remote pid that includes our own pid:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+send(pid, {:ping, self()})
+```
+
+Block until the response has arrived:
+
+<!-- livebook:{"reevaluate_automatically":true} -->
+
+```elixir
+receive do
+  message -> message
+end
+```

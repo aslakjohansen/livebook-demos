@@ -53,6 +53,7 @@ Useful techniques:
 - [Filesystem](filesystem.livemd)
 - [Load balancing](load-balancing.livemd)
 - [Rate limiting](rate-limiting.livemd)
+- [Attaching to another node](attach.livemd)
 - [Dynamic graphics (both vector and bitmapped)](dynamic-graphics.livemd)
 - [Persistent embedded key-value store with CubDB](cubdb.livemd)
 - [Plotting functions](plotting-functions.livemd)
