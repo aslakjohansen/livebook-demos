@@ -202,24 +202,30 @@ Variables for relevant entities:
 floor = ~i"#{model}floor3"
 roomA = ~i"#{model}roomA"
 roomAocc = ~i"#{model}roomA/occ"
+modRoomAocc = ~i"#{model}roomA/mod/occ"
 roomApir = ~i"#{model}roomA/pir"
 roomApirData = ~i"#{model}roomA/pir/data"
 roomAtemp = ~i"#{model}roomA/temp"
+modRoomAtemp = ~i"#{model}roomA/mod/temp"
 roomAtempData = ~i"#{model}roomA/temp/data"
 roomAtc = ~i"#{model}roomA/tc"
 roomAtcData = ~i"#{model}roomA/tc/data"
 roomArhum = ~i"#{model}roomA/rhum"
+modRoomArhum = ~i"#{model}roomA/mod/rhum"
 roomAhum = ~i"#{model}roomA/hum"
 roomAhumData = ~i"#{model}roomA/hum/data"
 roomB = ~i"#{model}roomB"
 roomBocc = ~i"#{model}roomB/occ"
+modRoomBocc = ~i"#{model}roomB/mod/occ"
 roomBpir = ~i"#{model}roomB/pir"
 roomBpirData = ~i"#{model}roomB/pir/data"
 roomBtemp = ~i"#{model}roomB/temp"
+modRoomBtemp = ~i"#{model}roomB/mod/temp"
 roomBtempData = ~i"#{model}roomB/temp/data"
 roomBtc = ~i"#{model}roomB/tc"
 roomBtcData = ~i"#{model}roomB/tc/data"
 roomBrhum = ~i"#{model}roomB/rhum"
+modRoomBrhum = ~i"#{model}roomB/mod/rhum"
 roomBhum = ~i"#{model}roomB/hum"
 roomBhumData = ~i"#{model}roomB/hum/data"
 ```
@@ -241,30 +247,30 @@ model =
       roomA
       |> RDF.type(Schema.Location.Room)
       |> Schema.Location.area(~L"17")
-      |> Schema.Modality.modality(roomAocc)
-      |> Schema.Modality.modality(roomAtemp)
-      |> Schema.Modality.modality(roomArhum)
+      |> Schema.Modality.modality(modRoomAocc)
+      |> Schema.Modality.modality(modRoomAtemp)
+      |> Schema.Modality.modality(modRoomArhum)
       |> Schema.Location.adjacent(roomB),
       roomB
       |> RDF.type(Schema.Location.Room)
       |> Schema.Location.area(~L"23")
-      |> Schema.Modality.modality(roomBocc)
-      |> Schema.Modality.modality(roomBtemp)
-      |> Schema.Modality.modality(roomBrhum)
+      |> Schema.Modality.modality(modRoomBocc)
+      |> Schema.Modality.modality(modRoomBtemp)
+      |> Schema.Modality.modality(modRoomBrhum)
       |> Schema.Location.adjacent(roomA),
 
       # modalities
-      roomAocc
+      modRoomAocc
       |> RDF.type(Schema.Modality.Occupancy),
-      roomAtemp
+      modRoomAtemp
       |> RDF.type(Schema.Modality.Temperature),
-      roomArhum
+      modRoomArhum
       |> RDF.type(Schema.Modality.RelativeHumidity),
-      roomBocc
+      modRoomBocc
       |> RDF.type(Schema.Modality.Occupancy),
-      roomBtemp
+      modRoomBtemp
       |> RDF.type(Schema.Modality.Temperature),
-      roomBrhum
+      modRoomBrhum
       |> RDF.type(Schema.Modality.RelativeHumidity),
 
       # pir sensors
@@ -272,36 +278,36 @@ model =
       |> RDF.type(Schema.Point.PIR)
       |> Schema.Unit.unit(Schema.Unit.Unitless)
       |> Schema.Data.data(roomApirData)
-      |> Schema.Modality.provides(roomAocc),
+      |> Schema.Modality.provides(modRoomAocc),
       roomBpir
       |> RDF.type(Schema.Point.PIR)
       |> Schema.Unit.unit(Schema.Unit.Unitless)
       |> Schema.Data.data(roomBpirData)
-      |> Schema.Modality.provides(roomBocc),
+      |> Schema.Modality.provides(modRoomBocc),
 
       # temperature sensors
       roomAtemp
       |> RDF.type(Schema.Point.TemperatureSensor)
       |> Schema.Unit.unit(Schema.Unit.DegreesCelcius)
       |> Schema.Data.data(roomAtempData)
-      |> Schema.Modality.provides(roomAtemp),
+      |> Schema.Modality.provides(modRoomAtemp),
       roomBtemp
       |> RDF.type(Schema.Point.TemperatureSensor)
       |> Schema.Unit.unit(Schema.Unit.Kelvin)
       |> Schema.Data.data(roomBtempData)
-      |> Schema.Modality.provides(roomBtemp),
+      |> Schema.Modality.provides(modRoomBtemp),
 
       # humidity sensors
       roomAhum
       |> RDF.type(Schema.Point.HumiditySensor)
       |> Schema.Unit.unit(Schema.Unit.Percentage)
       |> Schema.Data.data(roomAhumData)
-      |> Schema.Modality.provides(roomArhum),
+      |> Schema.Modality.provides(modRoomArhum),
       roomBhum
       |> RDF.type(Schema.Point.HumiditySensor)
       |> Schema.Unit.unit(Schema.Unit.Percentage)
       |> Schema.Data.data(roomBhumData)
-      |> Schema.Modality.provides(roomBrhum),
+      |> Schema.Modality.provides(modRoomBrhum),
 
       # data
       roomApirData
